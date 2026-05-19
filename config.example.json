@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy this file to config.json and customize. config.json is gitignored.",
+
+  "db": {
+    "path": "data/hotspots.db"
+  },
+
+  "collection": {
+    "default_category": "all",
+    "default_days": 3,
+    "twitter_buddy_dir": null
+  }
+}
