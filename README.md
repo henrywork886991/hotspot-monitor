@@ -1,16 +1,16 @@
 # hotspot-monitor
 
-加密貨幣 + 科技熱點監控的 Claude Code Skill，從 16+ 個數據源自動爬取並用 AI 分析。
+加密貨幣 + 科技熱點監控的 Claude Code Skill，從 **53 個數據源**自動爬取並用 AI 分析。
 
 ## 安裝
 
 ```bash
 # 1. 在你的專案根目錄 clone 這個 repo
-git clone https://github.com/ACCOUNT/hotspot-monitor.git
+git clone https://github.com/henrywork886991/hotspot-monitor.git
 
 # 2. 把 skill 文件放到 Claude Code 的 skills 目錄
 mkdir -p .claude/skills
-cp hotspot-monitor/hotspot-monitor.md .claude/skills/
+cp hotspot-monitor/SKILL.md .claude/skills/hotspot-monitor.md
 
 # 3. 安裝 Python 依賴
 pip install -r hotspot-monitor/requirements.txt
@@ -34,18 +34,100 @@ pip install -r hotspot-monitor/requirements.txt
 
 ---
 
-## 數據來源（16+，無需 API Key）
+## 數據來源（53 個，無需 API Key）
 
-| 類別 | 來源 |
+### 加密主流媒體（英文）
+| 來源 | 類型 |
 |------|------|
-| 加密新聞 | CoinDesk, Decrypt, The Defiant, CoinTelegraph |
-| 加密中文 | Wu Blockchain, SoPilot |
-| 市場數據 | CoinGecko trending |
-| 科技新聞 | TechCrunch, ArsTechnica, The Verge, 404 Media |
-| 開發社群 | HackerNews, GitHub Trending, V2EX |
-| 英文社群 | Reddit |
+| CoinDesk | RSS |
+| Decrypt | RSS |
+| The Defiant | RSS |
+| CoinTelegraph | RSS |
+| CoinTelegraph Regulation | RSS |
+| CryptoSlate | RSS |
+| BeInCrypto | RSS |
+| CryptoBriefing | RSS |
+| AMBCrypto | RSS |
+| Protos | RSS |
+| CryptoNews | RSS |
+| Unchained Crypto | RSS |
 
-**選填：** 設定 `EXA_API_KEY` 可額外搜尋 Twitter 推文和新聞（免費版 1000 次/月，在 [exa.ai](https://exa.ai) 申請）。
+### 加密中文媒體
+| 來源 | 類型 |
+|------|------|
+| PANews 最新文章 | API |
+| PANews 每日精選 | API |
+| ODaily 快訊 | RSS |
+| ODaily 文章 | RSS |
+| Wu Blockchain | RSS |
+| SoPilot (Twitter 熱推) | RSS |
+| BlockTempo (動區動趨) | RSS |
+| Zombit (區塊客) | RSS |
+
+### 亞洲區域媒體
+| 來源 | 類型 |
+|------|------|
+| CoinPost（日本） | RSS |
+| CoinDesk Japan | RSS |
+| TokenPost（韓國） | RSS |
+
+### 市場數據 & 鏈上
+| 來源 | 類型 |
+|------|------|
+| CoinGecko Trending Coins | API |
+| CoinGecko Top Exchanges | API |
+| DexScreener Boosted Tokens | API |
+| Glassnode Insights | RSS |
+| IntoTheBlock | RSS |
+
+### 監管 & 合規
+| 來源 | 類型 |
+|------|------|
+| Coin Center | RSS |
+| Chainalysis Blog | RSS |
+
+### Web3 基礎設施
+| 來源 | 類型 |
+|------|------|
+| Arbitrum (OffchainLabs) | RSS |
+| StarkNet (StarkWare) | RSS |
+| Optimism | RSS |
+| WalletConnect | RSS |
+| ENS Blog | RSS |
+| Synthetix | RSS |
+| Centrifuge (RWA/DeFi) | RSS |
+
+### 宏觀金融
+| 來源 | 類型 |
+|------|------|
+| MarketWatch | RSS |
+| CNBC Finance | RSS |
+| Financial Times Markets | RSS |
+| Seeking Alpha | RSS |
+| FXStreet | RSS |
+| ForexLive | RSS |
+| TradingView | RSS |
+
+### 科技媒體
+| 來源 | 類型 |
+|------|------|
+| TechCrunch | RSS |
+| ArsTechnica | RSS |
+| The Verge | RSS |
+| 404 Media | RSS |
+| 量子位 (QbitAI) | RSS |
+
+### 開發社群
+| 來源 | 類型 |
+|------|------|
+| HackerNews | API |
+| GitHub Trending | HTML scrape |
+| V2EX 熱門 | API |
+
+### 選用（需本地設置）
+| 來源 | 說明 |
+|------|------|
+| Twitter Buddy | 需先執行 `collect_twitter.py --login` |
 
 ---
 
@@ -53,9 +135,9 @@ pip install -r hotspot-monitor/requirements.txt
 
 ```
 hotspot-monitor/
-├── hotspot-monitor.md      ← Claude Code skill 文件
+├── SKILL.md                ← Claude Code skill 文件（放到 .claude/skills/）
 ├── scripts/
-│   ├── collect_trend.py    ← 主要爬取腳本
+│   ├── collect_trend.py    ← 主要爬取腳本（53 個來源）
 │   ├── collect_keyword.py  ← 關鍵字搜尋
 │   ├── collect_twitter.py  ← Twitter 瀏覽器爬取（選用）
 │   ├── save_to_db.py       ← 儲存到 SQLite
