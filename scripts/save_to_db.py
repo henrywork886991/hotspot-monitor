@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS hotspots (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     title        TEXT    NOT NULL,
     content      TEXT,
+    fulltext     TEXT,
     url          TEXT    NOT NULL UNIQUE,
     source       TEXT    NOT NULL,
     source_type  TEXT,
@@ -64,6 +65,10 @@ def get_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    # Migrate existing DBs that predate the fulltext column
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(hotspots)")}
+    if "fulltext" not in cols:
+        conn.execute("ALTER TABLE hotspots ADD COLUMN fulltext TEXT")
     conn.commit()
     return conn
 
@@ -75,11 +80,12 @@ def save_items(conn: sqlite3.Connection, items: list[dict]) -> tuple[int, int]:
         try:
             conn.execute(
                 """INSERT INTO hotspots
-                   (title, content, url, source, source_type, published_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (title, content, fulltext, url, source, source_type, published_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     item.get("title", "")[:500],
                     item.get("content", "")[:2000],
+                    item.get("fulltext") or None,
                     item.get("url", ""),
                     item.get("source", ""),
                     item.get("source_type", ""),

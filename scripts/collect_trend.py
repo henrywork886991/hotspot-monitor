@@ -33,7 +33,7 @@ import requests
 import xml.etree.ElementTree as ET
 import glob
 from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 
 try:
     from bs4 import BeautifulSoup
@@ -767,6 +767,81 @@ def collect_all(category: str = "all", days: int = 3,
     return unique
 
 
+# ── Fulltext enrichment ───────────────────────────────────────────────────────
+
+_ENRICH_SKIP = frozenset({
+    "coingecko", "coingecko_exchanges", "dexscreener",
+    "hackernews", "twitter_buddy", "v2ex", "sopilot_twitter",
+    "tradingview", "panews_articles", "panews_daily", "wallstcn",
+})
+_JINA_BASE   = "https://r.jina.ai/"
+_MIN_USEFUL  = 300
+_MAX_STORE   = 8000
+
+
+def _fetch_fulltext_one(item: dict, timeout: int = 18) -> str | None:
+    """Jina reader → trafilatura fallback. Returns text or None."""
+    url = item.get("url", "")
+    if not url or item.get("source") in _ENRICH_SKIP:
+        return None
+    # Jina
+    try:
+        r = requests.get(
+            _JINA_BASE + url,
+            headers={"User-Agent": "Mozilla/5.0", "X-Return-Format": "text"},
+            timeout=timeout,
+        )
+        if r.status_code == 200:
+            t = r.text.strip()
+            if len(t) >= _MIN_USEFUL:
+                return t[:_MAX_STORE]
+    except Exception:
+        pass
+    # trafilatura
+    try:
+        import trafilatura
+        raw = trafilatura.fetch_url(url)
+        if raw:
+            t = trafilatura.extract(raw)
+            if t and len(t) >= _MIN_USEFUL:
+                return t[:_MAX_STORE]
+    except Exception:
+        pass
+    return None
+
+
+def enrich_items(items: list[dict], max_workers: int = 6) -> list[dict]:
+    """Add 'fulltext' key to items that have enrichable URLs. Parallel fetch."""
+    targets = [i for i in items if i.get("source") not in _ENRICH_SKIP and i.get("url")]
+    print(f"[enrich] Fetching fulltext for {len(targets)} / {len(items)} items ...",
+          file=sys.stderr)
+
+    url_to_ft: dict[str, str | None] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_fetch_fulltext_one, item): item["url"] for item in targets}
+        done_count = 0
+        for future in as_completed(futures):
+            url = futures[future]
+            try:
+                text = future.result()
+            except Exception:
+                text = None
+            url_to_ft[url] = text
+            done_count += 1
+            status = f"OK {len(text)}c" if text else "FAIL"
+            print(f"  [{done_count}/{len(targets)}] [{status:9}] {url[:65]}",
+                  file=sys.stderr)
+
+    ok = sum(1 for v in url_to_ft.values() if v)
+    print(f"[enrich] Done — {ok} / {len(targets)} enriched", file=sys.stderr)
+
+    for item in items:
+        ft = url_to_ft.get(item.get("url"))
+        if ft:
+            item["fulltext"] = ft
+    return items
+
+
 # ── Twitter auto-collection ───────────────────────────────────────────────────
 
 def _auto_collect_twitter(scrolls: int, fresh_hours: int) -> str | None:
@@ -823,6 +898,10 @@ Examples:
                    help="Scroll count when auto-collecting tweets (default: 80)")
     p.add_argument("--fresh",            type=int, default=4, metavar="HOURS",
                    help="With --with-twitter: skip collection if data < N hours old (default: 4)")
+    p.add_argument("--enrich",           action="store_true",
+                   help="Fetch full article text (Jina + trafilatura) before output")
+    p.add_argument("--enrich-workers",   type=int, default=6, metavar="N",
+                   help="Parallel workers for --enrich (default: 6)")
     p.add_argument("--pretty",           action="store_true")
     args = p.parse_args()
 
@@ -834,6 +913,9 @@ Examples:
     print(f"Collecting [{args.category}] last {args.days}d ...", file=sys.stderr)
     results = collect_all(args.category, args.days, twitter_dir)
     print(f"Total: {len(results)} unique items", file=sys.stderr)
+
+    if args.enrich:
+        results = enrich_items(results, max_workers=args.enrich_workers)
 
     indent = 2 if args.pretty else None
     print(json.dumps(results, ensure_ascii=False, indent=indent))
