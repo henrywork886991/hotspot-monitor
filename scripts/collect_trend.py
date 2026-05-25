@@ -383,6 +383,10 @@ _TECH_RSS = [
     ("https://www.theverge.com/rss/index.xml",          "the_verge",    10),
     ("https://www.404media.co/rss/",                    "404media",     10),
     ("https://www.qbitai.com/feed",                     "qbitai",       10),  # 量子位
+    ("https://dev.to/feed",                             "devto",        12),  # 開發社群
+    ("https://lobste.rs/rss",                           "lobsters",     12),  # 程式社群
+    ("https://www.producthunt.com/feed",                "producthunt",  10),  # 新產品/工具
+    ("https://www.latent.space/feed",                   "latentspace",  10),  # AI 週報
 ]
 _CRYPTO_RSS_EXTRA = [
     ("https://cryptoslate.com/feed/",                "cryptoslate",  10),
@@ -401,6 +405,7 @@ _REGULATION_RSS = [
 _CHINESE_RSS = [
     ("https://rss.odaily.news/rss/newsflash",         "odaily_flash", 15),
     ("https://rss.odaily.news/rss/post",              "odaily_post",  10),
+    ("https://www.36kr.com/feed",                     "36kr",         12),  # 中文科技/創業
 ]
 _ONCHAIN_RSS = [
     ("https://insights.glassnode.com/rss/",          "glassnode",     8),
@@ -461,6 +466,8 @@ _SLOW_AGE: dict[str, int] = {
     "balancer_blog": 21,
     "zksync":        21,
     "matter_labs":   21,
+    "latentspace":   14,  # AI weekly newsletter
+    "36kr":          7,   # posts but sometimes slow
 }
 
 
@@ -528,6 +535,39 @@ def fetch_coingecko_exchanges(max_items: int = 10) -> list[dict]:
         return results
     except Exception as e:
         print(f"[coingecko_exchanges] ERROR: {e}", file=sys.stderr)
+        return []
+
+
+def fetch_wallstcn(max_items: int = 15) -> list[dict]:
+    """華爾街見聞 — 中文宏觀/外匯/全球金融即時資訊."""
+    try:
+        resp = requests.get(
+            "https://api-one.wallstcn.com/apiv1/content/information-flow",
+            params={"channel": "global-channel", "accept": "article", "limit": max_items},
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        entries = resp.json().get("data", {}).get("items", [])
+        results = []
+        for entry in entries:
+            res = entry.get("resource", {})
+            title = (res.get("title") or "").strip()
+            if not title:
+                continue
+            uri  = res.get("uri", "")
+            desc = (res.get("content_text") or "").strip()[:400]
+            ts   = res.get("display_time")
+            pub  = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else ""
+            results.append({
+                "title": title, "content": desc,
+                "url": uri or f"https://wallstreetcn.com/articles/{res.get('id','')}",
+                "source": "wallstcn", "source_type": "api",
+                "published_at": pub,
+            })
+        return results
+    except Exception as e:
+        print(f"[wallstcn] ERROR: {e}", file=sys.stderr)
         return []
 
 
@@ -675,6 +715,11 @@ def collect_all(category: str = "all", days: int = 3,
         if C in ("macro", "all"):
             _rss(_CFD_RSS)
             _rss(_TA_RSS)
+            _api("wallstcn", fetch_wallstcn)
+
+        # wallstcn also useful for cn_crypto context
+        if C in ("cn_crypto",):
+            _api("wallstcn", fetch_wallstcn)
 
         # ── Regulation ───────────────────────────────────────────────────────
         if C in ("regulation", "all"):
