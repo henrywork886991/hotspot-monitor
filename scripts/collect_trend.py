@@ -1,14 +1,26 @@
 #!/usr/bin/env python3
 """
-collect_trend.py — Collect crypto/tech hotspot data from 14+ sources.
+collect_trend.py — Collect crypto/tech hotspot data from 55+ sources.
 Outputs a JSON array to stdout. Pipe into save_to_db.py to persist.
+
+Categories:
+  all         — Everything (default)
+  crypto      — English crypto news + regulation + on-chain + Asian media
+  defi        — DeFi protocols, on-chain analytics, DEX data
+  web3        — L2/infra blogs (Arbitrum, StarkNet, Optimism, zkSync, Base…)
+  cn_crypto   — Chinese crypto media (PANews, ODaily, BlockTempo, SoPilot…)
+  asia        — Asian regional media (JP, KR, TW)
+  stocks      — US/global equity markets (Yahoo Finance, MarketWatch, CNBC…)
+  macro       — Forex, rates, macro (FXStreet, ForexLive, TradingView…)
+  regulation  — Crypto regulation (Coin Center, CoinTelegraph Reg, Chainalysis…)
+  tech        — Tech/programming (TechCrunch, ArsTechnica, HackerNews, GitHub…)
 
 Usage:
   python collect_trend.py                                     # all categories
-  python collect_trend.py --category crypto                   # crypto/web3 only
-  python collect_trend.py --category tech                     # tech/programming only
+  python collect_trend.py --category stocks                   # US stocks only
+  python collect_trend.py --category cn_crypto                # Chinese crypto only
+  python collect_trend.py --category defi                     # DeFi/on-chain only
   python collect_trend.py --days 2                            # last 2 days only
-  python collect_trend.py --twitter-buddy-dir ~/tw/data/tweets/
   python collect_trend.py | python save_to_db.py              # collect + save to DB
 """
 
@@ -403,16 +415,27 @@ _WEB3_INFRA_RSS = [
     ("https://medium.com/feed/starkware",           "starknet",       8),
     ("https://medium.com/feed/walletconnect",       "walletconnect",  8),
     ("https://optimism.mirror.xyz/feed/atom",       "optimism",       8),
+    ("https://zksync.mirror.xyz/feed/atom",         "zksync",         8),  # zkSync Era
+    ("https://medium.com/feed/matter-labs",         "matter_labs",    8),  # zkSync team blog
+]
+_DEFI_PROTOCOL_RSS = [
+    ("https://medium.com/feed/aave",                "aave_blog",      8),
+    ("https://medium.com/feed/balancer-protocol",   "balancer_blog",  8),
 ]
 _CFD_RSS = [
     ("https://www.fxstreet.com/rss/news",            "fxstreet",     12),
     ("https://www.forexlive.com/feed/news",          "forexlive",    12),
 ]
 _STOCKS_RSS = [
-    ("https://feeds.marketwatch.com/marketwatch/realtimeheadlines/", "marketwatch", 10),
+    ("https://feeds.marketwatch.com/marketwatch/realtimeheadlines/", "marketwatch",  10),
     ("https://www.cnbc.com/id/10000664/device/rss/rss.html",         "cnbc_finance", 12),
     ("https://www.ft.com/markets?format=rss",        "ft_markets",   10),
     ("https://seekingalpha.com/market_currents.xml", "seeking_alpha",  8),
+]
+_STOCKS_RSS_EXTRA = [
+    ("https://finance.yahoo.com/news/rssindex",             "yahoo_finance", 15),
+    ("https://feeds.bbci.co.uk/news/business/rss.xml",      "bbc_business",  12),
+    ("https://www.investing.com/rss/news.rss",              "investing_com", 10),
 ]
 _TA_RSS = [
     ("https://www.tradingview.com/feed/",            "tradingview",  15),
@@ -428,12 +451,16 @@ _REGIONAL_RSS = [
 
 # ── New API fetchers ──────────────────────────────────────────────────────────
 
-# Sources that post weekly/biweekly — use a wider time window than the default
+# Sources that post weekly/biweekly/monthly — use a wider time window than default
 _SLOW_AGE: dict[str, int] = {
-    "coin_center": 14,
-    "ens_blog":    14,
-    "chainalysis": 14,
-    "centrifuge":  14,
+    "coin_center":   14,
+    "ens_blog":      14,
+    "chainalysis":   14,
+    "centrifuge":    14,
+    "aave_blog":     21,
+    "balancer_blog": 21,
+    "zksync":        21,
+    "matter_labs":   21,
 }
 
 
@@ -575,58 +602,98 @@ def fetch_panews_daily(days: int = 1) -> list[dict]:
     return results
 
 
+_VALID_CATEGORIES = {
+    "all", "crypto", "defi", "web3", "cn_crypto",
+    "asia", "stocks", "macro", "regulation", "tech",
+}
+
+
 def collect_all(category: str = "all", days: int = 3,
                 twitter_buddy_dir: str | None = None) -> list[dict]:
+    C = category
     jobs: dict = {}
+
+    def _rss(lst: list) -> None:
+        for url, src, limit in lst:
+            if src not in jobs:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit,
+                                        _SLOW_AGE.get(src, days), "rss")
+
+    def _api(key: str, fn, *args) -> None:
+        if key not in jobs:
+            jobs[key] = pool.submit(fn, *args)
+
     with ThreadPoolExecutor(max_workers=24) as pool:
-        if category in ("crypto", "all"):
-            for url, src, limit in _CRYPTO_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _CRYPTO_RSS_EXTRA:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit,
-                                        _SLOW_AGE.get(src, days), "rss")
-            for url, src, limit in _REGULATION_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit,
-                                        _SLOW_AGE.get(src, days), "rss")
-            for url, src, limit in _ONCHAIN_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit,
-                                        _SLOW_AGE.get(src, days), "rss")
-            for url, src, limit in _DERIVATIVES_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _WEB3_INFRA_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _CFD_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _STOCKS_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _TA_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            for url, src, limit in _REGIONAL_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            jobs["coingecko"]           = pool.submit(fetch_coingecko)
-            jobs["coingecko_exchanges"] = pool.submit(fetch_coingecko_exchanges)
-            jobs["dexscreener"]         = pool.submit(fetch_dexscreener)
 
-        if category in ("tech", "all"):
-            for url, src, limit in _TECH_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            jobs["github_trending"] = pool.submit(fetch_github_trending, category)
-            jobs["hackernews"]      = pool.submit(fetch_hackernews, days)
+        # ── Crypto (English main stream) ─────────────────────────────────────
+        if C in ("crypto", "all"):
+            _rss(_CRYPTO_RSS)
+            _rss(_CRYPTO_RSS_EXTRA)
+            _rss(_REGULATION_RSS)
+            _rss(_CHINESE_RSS)
+            _rss(_REGIONAL_RSS)
+            _api("coingecko",           fetch_coingecko)
+            _api("coingecko_exchanges", fetch_coingecko_exchanges)
+            _api("dexscreener",         fetch_dexscreener)
+            _api("panews_articles",     fetch_panews_articles)
+            _api("panews_daily",        fetch_panews_daily)
+            _api("sopilot",             fetch_sopilot, C)
 
-        # Chinese crypto media — included for crypto and all
-        if category in ("crypto", "all"):
-            for url, src, limit in _CHINESE_RSS:
-                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+        # ── DeFi / On-chain ──────────────────────────────────────────────────
+        if C in ("defi", "all"):
+            _rss(_ONCHAIN_RSS)
+            _rss(_DERIVATIVES_RSS)
+            _rss(_DEFI_PROTOCOL_RSS)
+            _rss(_WEB3_INFRA_RSS)
+            _api("dexscreener", fetch_dexscreener)
+            _api("coingecko",   fetch_coingecko)
+
+        # ── Web3 Infrastructure ──────────────────────────────────────────────
+        if C in ("web3", "all"):
+            _rss(_WEB3_INFRA_RSS)
+            _rss(_ONCHAIN_RSS)
+
+        # ── Chinese Crypto Media ─────────────────────────────────────────────
+        if C in ("cn_crypto", "all"):
+            _rss(_CHINESE_RSS)
+            _rss(_REGIONAL_RSS)
+            _api("panews_articles", fetch_panews_articles)
+            _api("panews_daily",    fetch_panews_daily)
+            _api("sopilot",         fetch_sopilot, C)
+
+        # ── Asian Regional Media ─────────────────────────────────────────────
+        if C in ("asia", "all"):
+            _rss(_REGIONAL_RSS)
+
+        # ── US / Global Stocks ───────────────────────────────────────────────
+        if C in ("stocks", "all"):
+            _rss(_STOCKS_RSS)
+            _rss(_STOCKS_RSS_EXTRA)
+            _rss(_TA_RSS)
+
+        # ── Macro / Forex / Rates ────────────────────────────────────────────
+        if C in ("macro", "all"):
+            _rss(_CFD_RSS)
+            _rss(_TA_RSS)
+
+        # ── Regulation ───────────────────────────────────────────────────────
+        if C in ("regulation", "all"):
+            _rss(_REGULATION_RSS)
+
+        # ── Tech / Programming ───────────────────────────────────────────────
+        if C in ("tech", "all"):
+            _rss(_TECH_RSS)
+            _api("github_trending", fetch_github_trending, C)
+            _api("hackernews",      fetch_hackernews, days)
+            _api("v2ex",            fetch_v2ex, C)
+
+        # ── Social cross-category (all only) ─────────────────────────────────
+        if C == "all":
+            _api("sopilot", fetch_sopilot, C)
+            _api("v2ex",    fetch_v2ex, C)
 
         if twitter_buddy_dir:
-            jobs["twitter_buddy"] = pool.submit(fetch_twitter_buddy, twitter_buddy_dir, days * 24)
-
-        if category in ("crypto", "all"):
-            jobs["panews_articles"] = pool.submit(fetch_panews_articles)
-            jobs["panews_daily"]    = pool.submit(fetch_panews_daily)
-
-        jobs["sopilot"] = pool.submit(fetch_sopilot, category)
-        jobs["v2ex"]    = pool.submit(fetch_v2ex,    category)
+            _api("twitter_buddy", fetch_twitter_buddy, twitter_buddy_dir, days * 24)
 
         all_items: list[dict] = []
         for name, future in jobs.items():
@@ -690,7 +757,9 @@ Examples:
   python collect_trend.py | python save_to_db.py
         """,
     )
-    p.add_argument("--category",         choices=["crypto", "tech", "all"], default="all")
+    p.add_argument("--category",
+                   choices=sorted(_VALID_CATEGORIES), default="all",
+                   help="Filter by vertical: crypto|defi|web3|cn_crypto|asia|stocks|macro|regulation|tech|all")
     p.add_argument("--days",             type=int, default=3)
     p.add_argument("--twitter-buddy-dir", metavar="DIR",
                    help="Use existing twitter-buddy data directory")
