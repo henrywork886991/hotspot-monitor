@@ -370,17 +370,242 @@ _TECH_RSS = [
     ("https://feeds.arstechnica.com/arstechnica/index", "arstechnica",  15),
     ("https://www.theverge.com/rss/index.xml",          "the_verge",    10),
     ("https://www.404media.co/rss/",                    "404media",     10),
+    ("https://www.qbitai.com/feed",                     "qbitai",       10),  # 量子位
 ]
+_CRYPTO_RSS_EXTRA = [
+    ("https://cryptoslate.com/feed/",                "cryptoslate",  10),
+    ("https://beincrypto.com/feed/",                 "beincrypto",   10),
+    ("https://medium.com/feed/centrifuge",           "centrifuge",    8),  # RWA/DeFi
+    ("https://cryptobriefing.com/feed/",              "cryptobriefing", 12),
+    ("https://ambcrypto.com/feed/",                  "ambcrypto",    10),
+    ("https://protos.com/feed/",                     "protos",       10),
+]
+_REGULATION_RSS = [
+    ("https://www.coincenter.org/feed/",             "coin_center",   8),  # weekly — uses _SLOW_AGE
+    ("https://cointelegraph.com/rss/tag/regulation", "ct_regulation", 10),
+    ("https://cryptonews.com/news/feed/",            "cryptonews",    10),
+    ("https://blog.chainalysis.com/feed/",           "chainalysis",   8),  # biweekly — uses _SLOW_AGE
+]
+_CHINESE_RSS = [
+    ("https://rss.odaily.news/rss/newsflash",         "odaily_flash", 15),
+    ("https://rss.odaily.news/rss/post",              "odaily_post",  10),
+]
+_ONCHAIN_RSS = [
+    ("https://insights.glassnode.com/rss/",          "glassnode",     8),
+    ("https://ens.domains/blog/rss.xml",             "ens_blog",      8),  # weekly — uses _SLOW_AGE
+    ("https://medium.com/feed/intotheblock",         "intotheblock",  8),
+]
+_DERIVATIVES_RSS = [
+    ("https://blog.synthetix.io/rss/",              "synthetix",      8),
+]
+_WEB3_INFRA_RSS = [
+    ("https://medium.com/feed/offchainlabs",        "arbitrum",       8),
+    ("https://medium.com/feed/starkware",           "starknet",       8),
+    ("https://medium.com/feed/walletconnect",       "walletconnect",  8),
+    ("https://optimism.mirror.xyz/feed/atom",       "optimism",       8),
+]
+_CFD_RSS = [
+    ("https://www.fxstreet.com/rss/news",            "fxstreet",     12),
+    ("https://www.forexlive.com/feed/news",          "forexlive",    12),
+]
+_STOCKS_RSS = [
+    ("https://feeds.marketwatch.com/marketwatch/realtimeheadlines/", "marketwatch", 10),
+    ("https://www.cnbc.com/id/10000664/device/rss/rss.html",         "cnbc_finance", 12),
+    ("https://www.ft.com/markets?format=rss",        "ft_markets",   10),
+    ("https://seekingalpha.com/market_currents.xml", "seeking_alpha",  8),
+]
+_TA_RSS = [
+    ("https://www.tradingview.com/feed/",            "tradingview",  15),
+]
+_REGIONAL_RSS = [
+    ("https://coinpost.jp/?feed=rss2",               "coinpost_jp",  10),
+    ("https://www.coindeskjapan.com/feed/",          "coindesk_jp",  10),
+    ("https://www.tokenpost.kr/rss",                 "tokenpost_kr", 10),
+    ("https://www.blocktempo.com/feed/",             "blocktempo",   12),
+    ("https://zombit.info/feed/",                    "zombit",       10),
+]
+
+
+# ── New API fetchers ──────────────────────────────────────────────────────────
+
+# Sources that post weekly/biweekly — use a wider time window than the default
+_SLOW_AGE: dict[str, int] = {
+    "coin_center": 14,
+    "ens_blog":    14,
+    "chainalysis": 14,
+    "centrifuge":  14,
+}
+
+
+def fetch_dexscreener(max_items: int = 15) -> list[dict]:
+    """DexScreener top boosted tokens — meme/trending token hotspots."""
+    try:
+        resp = requests.get(
+            "https://api.dexscreener.com/token-boosts/top/v1",
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = []
+        for token in resp.json()[:max_items]:
+            chain = token.get("chainId", "")
+            addr = token.get("tokenAddress", "")
+            desc = (token.get("description") or "").strip()
+            url = token.get("url") or f"https://dexscreener.com/{chain}/{addr}"
+            title = f"[{chain.upper()}] {desc[:70]}" if desc else f"[{chain.upper()}] {addr[:16]}..."
+            results.append({
+                "title": title,
+                "content": desc[:400] or f"Trending token on {chain}",
+                "url": url,
+                "source": "dexscreener",
+                "source_type": "api",
+                "published_at": "",
+            })
+        return results
+    except Exception as e:
+        print(f"[dexscreener] ERROR: {e}", file=sys.stderr)
+        return []
+
+
+
+
+def fetch_coingecko_exchanges(max_items: int = 10) -> list[dict]:
+    """CoinGecko top exchanges by volume — for exchange/platform comparison vertical."""
+    try:
+        resp = requests.get(
+            "https://api.coingecko.com/api/v3/exchanges",
+            params={"per_page": max_items, "page": 1},
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = []
+        for ex in resp.json():
+            name     = ex.get("name", "")
+            ex_id    = ex.get("id", "")
+            vol_btc  = ex.get("trade_volume_24h_btc") or 0
+            country  = ex.get("country") or "Global"
+            year     = ex.get("year_established") or ""
+            url      = ex.get("url") or f"https://www.coingecko.com/en/exchanges/{ex_id}"
+            content  = f"24h Vol: {float(vol_btc):,.1f} BTC | Country: {country}"
+            if year:
+                content += f" | Est. {year}"
+            results.append({
+                "title": f"[Exchange] {name} — top {max_items} by volume",
+                "content": content,
+                "url": url,
+                "source": "coingecko_exchanges",
+                "source_type": "api",
+                "published_at": "",
+            })
+        return results
+    except Exception as e:
+        print(f"[coingecko_exchanges] ERROR: {e}", file=sys.stderr)
+        return []
+
+
+def fetch_panews_articles(max_items: int = 20) -> list[dict]:
+    """PANews /articles — latest Chinese crypto news feed."""
+    try:
+        resp = requests.get(
+            "https://universal-api.panewslab.com/articles",
+            params={"lang": "zh", "page": 1, "pageSize": max_items},
+            headers={"Accept": "application/json"},
+            timeout=12,
+        )
+        resp.raise_for_status()
+        results = []
+        for art in resp.json():
+            art_id = art.get("id", "")
+            title  = (art.get("title") or "").strip()
+            desc   = (art.get("desc") or "").strip()
+            if not title:
+                continue
+            url = f"https://www.panewslab.com/zh/articledetails/{art_id}.html"
+            views    = (art.get("metric") or {}).get("views", 0)
+            content  = desc
+            if views:
+                content += f" | 閱讀: {views}"
+            results.append({
+                "title": title,
+                "content": content[:500],
+                "url": url,
+                "source": "panews",
+                "source_type": "api",
+                "published_at": art.get("publishedAt", ""),
+            })
+        return results
+    except Exception as e:
+        print(f"[panews_articles] ERROR: {e}", file=sys.stderr)
+        return []
+
+
+def fetch_panews_daily(days: int = 1) -> list[dict]:
+    """PANews /daily-must-reads — editorial picks for today (and optionally yesterday)."""
+    results = []
+    today = datetime.now(timezone.utc)
+    for offset in range(days):
+        date_str = (today - timedelta(days=offset)).strftime("%Y-%m-%d")
+        try:
+            resp = requests.get(
+                "https://universal-api.panewslab.com/daily-must-reads",
+                params={"date": date_str},
+                headers={"Accept": "application/json"},
+                timeout=12,
+            )
+            resp.raise_for_status()
+            for entry in resp.json():
+                art = entry.get("article") or {}
+                art_id = art.get("id", "")
+                title  = (art.get("title") or "").strip()
+                desc   = (art.get("desc") or "").strip()
+                if not title:
+                    continue
+                url = f"https://www.panewslab.com/zh/articledetails/{art_id}.html"
+                results.append({
+                    "title": f"[PANews精選] {title}",
+                    "content": desc[:500],
+                    "url": url,
+                    "source": "panews_daily",
+                    "source_type": "api",
+                    "published_at": art.get("publishedAt", ""),
+                })
+        except Exception as e:
+            print(f"[panews_daily:{date_str}] ERROR: {e}", file=sys.stderr)
+    return results
 
 
 def collect_all(category: str = "all", days: int = 3,
                 twitter_buddy_dir: str | None = None) -> list[dict]:
     jobs: dict = {}
-    with ThreadPoolExecutor(max_workers=12) as pool:
+    with ThreadPoolExecutor(max_workers=24) as pool:
         if category in ("crypto", "all"):
             for url, src, limit in _CRYPTO_RSS:
                 jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
-            jobs["coingecko"] = pool.submit(fetch_coingecko)
+            for url, src, limit in _CRYPTO_RSS_EXTRA:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit,
+                                        _SLOW_AGE.get(src, days), "rss")
+            for url, src, limit in _REGULATION_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit,
+                                        _SLOW_AGE.get(src, days), "rss")
+            for url, src, limit in _ONCHAIN_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit,
+                                        _SLOW_AGE.get(src, days), "rss")
+            for url, src, limit in _DERIVATIVES_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            for url, src, limit in _WEB3_INFRA_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            for url, src, limit in _CFD_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            for url, src, limit in _STOCKS_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            for url, src, limit in _TA_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            for url, src, limit in _REGIONAL_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+            jobs["coingecko"]           = pool.submit(fetch_coingecko)
+            jobs["coingecko_exchanges"] = pool.submit(fetch_coingecko_exchanges)
+            jobs["dexscreener"]         = pool.submit(fetch_dexscreener)
 
         if category in ("tech", "all"):
             for url, src, limit in _TECH_RSS:
@@ -388,8 +613,17 @@ def collect_all(category: str = "all", days: int = 3,
             jobs["github_trending"] = pool.submit(fetch_github_trending, category)
             jobs["hackernews"]      = pool.submit(fetch_hackernews, days)
 
+        # Chinese crypto media — included for crypto and all
+        if category in ("crypto", "all"):
+            for url, src, limit in _CHINESE_RSS:
+                jobs[src] = pool.submit(fetch_rss, url, src, limit, days, "rss")
+
         if twitter_buddy_dir:
             jobs["twitter_buddy"] = pool.submit(fetch_twitter_buddy, twitter_buddy_dir, days * 24)
+
+        if category in ("crypto", "all"):
+            jobs["panews_articles"] = pool.submit(fetch_panews_articles)
+            jobs["panews_daily"]    = pool.submit(fetch_panews_daily)
 
         jobs["sopilot"] = pool.submit(fetch_sopilot, category)
         jobs["v2ex"]    = pool.submit(fetch_v2ex,    category)
