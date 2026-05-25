@@ -120,9 +120,13 @@ def _parse_date(s: str) -> datetime | None:
 def fetch_rss(url: str, source: str, max_items: int = 15, max_age_days: int = 3,
               source_type: str = "rss") -> list[dict]:
     """Generic RSS/Atom fetcher. No category filter — source itself guarantees relevance."""
+    import time
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=12, allow_redirects=True)
+        if resp.status_code == 429:
+            time.sleep(4)
+            resp = requests.get(url, headers=_HEADERS, timeout=12, allow_redirects=True)
         resp.raise_for_status()
         root = ET.fromstring(resp.text)
         items = root.findall(".//item") or root.findall(f".//{_ATOM}entry")
@@ -382,7 +386,6 @@ _TECH_RSS = [
     ("https://feeds.arstechnica.com/arstechnica/index", "arstechnica",  15),
     ("https://www.theverge.com/rss/index.xml",          "the_verge",    10),
     ("https://www.404media.co/rss/",                    "404media",     10),
-    ("https://www.qbitai.com/feed",                     "qbitai",       10),  # 量子位
     ("https://dev.to/feed",                             "devto",        12),  # 開發社群
     ("https://lobste.rs/rss",                           "lobsters",     12),  # 程式社群
     ("https://www.producthunt.com/feed",                "producthunt",  10),  # 新產品/工具
@@ -405,7 +408,10 @@ _REGULATION_RSS = [
 _CHINESE_RSS = [
     ("https://rss.odaily.news/rss/newsflash",         "odaily_flash", 15),
     ("https://rss.odaily.news/rss/post",              "odaily_post",  10),
-    ("https://www.36kr.com/feed",                     "36kr",         12),  # 中文科技/創業
+]
+_TECH_CN_RSS = [
+    ("https://www.36kr.com/feed",                     "36kr",         12),  # 中文科技/創業媒體
+    ("https://www.qbitai.com/feed",                   "qbitai",       10),  # 量子位
 ]
 _ONCHAIN_RSS = [
     ("https://insights.glassnode.com/rss/",          "glassnode",     8),
@@ -677,7 +683,9 @@ def collect_all(category: str = "all", days: int = 3,
             _api("dexscreener",         fetch_dexscreener)
             _api("panews_articles",     fetch_panews_articles)
             _api("panews_daily",        fetch_panews_daily)
-            _api("sopilot",             fetch_sopilot, C)
+            # sopilot is a curated crypto+AI source — skip regex filter to avoid
+            # missing Chinese posts that discuss crypto without specific token names
+            _api("sopilot",             fetch_sopilot, "all")
 
         # ── DeFi / On-chain ──────────────────────────────────────────────────
         if C in ("defi", "all"):
@@ -699,7 +707,7 @@ def collect_all(category: str = "all", days: int = 3,
             _rss(_REGIONAL_RSS)
             _api("panews_articles", fetch_panews_articles)
             _api("panews_daily",    fetch_panews_daily)
-            _api("sopilot",         fetch_sopilot, C)
+            _api("sopilot",         fetch_sopilot, "all")
 
         # ── Asian Regional Media ─────────────────────────────────────────────
         if C in ("asia", "all"):
@@ -728,6 +736,7 @@ def collect_all(category: str = "all", days: int = 3,
         # ── Tech / Programming ───────────────────────────────────────────────
         if C in ("tech", "all"):
             _rss(_TECH_RSS)
+            _rss(_TECH_CN_RSS)          # 36kr + 量子位
             _api("github_trending", fetch_github_trending, C)
             _api("hackernews",      fetch_hackernews, days)
             _api("v2ex",            fetch_v2ex, C)
