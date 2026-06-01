@@ -10,7 +10,7 @@ git clone https://github.com/henrywork886991/hotspot-monitor.git
 
 # 2. 把 skill 文件放到 Claude Code 的 skills 目錄
 mkdir -p .claude/skills
-cp hotspot-monitor/SKILL.md .claude/skills/hotspot-monitor.md
+cp hotspot-monitor/hotspot-monitor.md .claude/skills/hotspot-monitor.md
 
 # 3. 安裝 Python 依賴
 pip install -r hotspot-monitor/requirements.txt
@@ -47,25 +47,25 @@ pip install -r hotspot-monitor/requirements.txt
 
 ```bash
 # 只抓美股新聞
-python scripts/collect_trend.py --category stocks
+python hotspot-monitor/scripts/collect_trend.py --category stocks
 
 # 只抓中文加密媒體
-python scripts/collect_trend.py --category cn_crypto
+python hotspot-monitor/scripts/collect_trend.py --category cn_crypto
 
 # DeFi 鏈上數據
-python scripts/collect_trend.py --category defi
+python hotspot-monitor/scripts/collect_trend.py --category defi
 
 # 存入資料庫（推薦）
-python scripts/collect_trend.py --category stocks | python scripts/save_to_db.py
+python hotspot-monitor/scripts/collect_trend.py --category stocks | python hotspot-monitor/scripts/save_to_db.py
 
 # 全部來源 + 存庫
-python scripts/collect_trend.py --category all | python scripts/save_to_db.py
+python hotspot-monitor/scripts/collect_trend.py --category all | python hotspot-monitor/scripts/save_to_db.py
 
 # 查詢最近 24 小時
-python scripts/query_db.py --recent 24
+python hotspot-monitor/scripts/query_db.py --recent 24
 
 # 關鍵字搜尋
-python scripts/collect_keyword.py "Bitcoin ETF" --days 7 | python scripts/save_to_db.py
+python hotspot-monitor/scripts/collect_keyword.py "Bitcoin ETF" --days 7 | python hotspot-monitor/scripts/save_to_db.py
 ```
 
 ---
