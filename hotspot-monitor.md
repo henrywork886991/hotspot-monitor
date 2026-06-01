@@ -4,77 +4,139 @@ description: >
   Crypto / tech hotspot discovery and analysis with persistent SQLite database.
   Use when asked about: 今天幣圈有什麼熱點, 幫我看看最新科技動態, analyze crypto trends,
   what's trending in AI, 查一下最近熱點, generate hotspot report, 幫我搜尋某個關鍵字的熱點,
-  write hotspots to database, query hotspot history, 最近有什麼值得關注的.
+  write hotspots to database, query hotspot history, 最近有什麼值得關注的,
+  美股最新新聞, 中文加密媒體, DeFi鏈上動態, Web3基礎設施, 監管合規新聞,
+  外匯宏觀動態, 亞洲加密市場, help me collect stocks news, defi news today.
 ---
 
 # Hotspot Monitor — Claude Code Skill
 
-Collect crypto/tech hotspot data from 16+ sources, save to a SQLite database,
-and generate AI analysis reports. No extra API keys required for the core features.
+Collect crypto/tech hotspot data from **57 個數據源**，支援 10 個獨立 category，
+存入 SQLite 資料庫，並用 AI 生成分析報告。無需額外 API Key。
 
-## Setup
-
-Assuming you cloned this repo into your project root as `hotspot-monitor/`:
+## Quick Start
 
 ```bash
-pip install -r hotspot-monitor/requirements.txt
+pip install requests beautifulsoup4
 ```
 
-Optional — copy and customize config:
-```bash
-cp hotspot-monitor/config.example.json hotspot-monitor/config.json
-```
+## Category → 用戶意圖對照表
 
-## Data Sources
+**收到用戶請求時，先依下表映射 category，再執行對應的 collect 指令：**
 
-| Source | Method | Category | Notes |
-|--------|--------|----------|-------|
-| CoinDesk | RSS | Crypto | Free, no key |
-| Decrypt | RSS | Crypto | Free, no key |
-| The Defiant | RSS | DeFi | Free, no key |
-| CoinTelegraph | RSS | Crypto | Free, no key |
-| Wu Blockchain | RSS | Crypto (CN) | Free, no key |
-| Unchained Crypto | RSS | Crypto | Free, no key |
-| TechCrunch | RSS | Tech | Free, no key |
-| ArsTechnica | RSS | Tech | Free, no key |
-| The Verge | Atom | Tech | Free, no key |
-| 404 Media | RSS | Tech | Free, no key |
-| GitHub Trending | HTML scrape | Tech | BeautifulSoup |
-| HackerNews | JSON API | Tech | Free, no key |
-| V2EX | JSON API | Tech (CN) | Free, no key |
-| SoPilot | RSS | AI+Crypto (CN) | Free, no key |
-| CoinGecko | JSON API | Crypto prices | Free, no key |
-| Reddit | JSON API | Community | Free, no key |
-| Exa API | JSON API | News+Tweets | Optional — needs `EXA_API_KEY` |
+| 用戶說... | Category | 說明 |
+|----------|----------|------|
+| 美股/股市/股票/美國市場/US stocks | `stocks` | Yahoo Finance, MarketWatch, CNBC, FT, BBC Business, Investing.com, TradingView |
+| 外匯/總經/宏觀/Forex/Fed/利率/匯率 | `macro` | FXStreet, ForexLive, TradingView |
+| DeFi/去中心化/鏈上/鏈上數據/on-chain | `defi` | Glassnode, IntoTheBlock, Synthetix, Aave, Balancer, DexScreener, CoinGecko, web3 infra |
+| Web3基礎設施/L2/Layer2/zkSync/Arbitrum/Optimism/Base | `web3` | Arbitrum, StarkNet, Optimism, WalletConnect, zkSync, Matter Labs, ENS, Glassnode |
+| 中文幣圈/中文加密/中國區塊鏈 | `cn_crypto` | PANews, ODaily, BlockTempo, Zombit, SoPilot, 亞洲各地媒體 |
+| 亞洲市場/日本/韓國/台灣 | `asia` | CoinPost JP, CoinDesk JP, TokenPost KR, BlockTempo, Zombit |
+| 監管/合規/政策/立法/regulation | `regulation` | Coin Center, CoinTelegraph Reg, CryptoNews, Chainalysis |
+| 科技/程式/AI/開源/GitHub/HackerNews | `tech` | TechCrunch, ArsTechnica, The Verge, 404Media, 量子位, GitHub Trending, HackerNews, V2EX |
+| 加密貨幣/幣圈/crypto（廣義）| `crypto` | 所有英文加密媒體 + 監管 + 中文媒體 + 亞洲 + CoinGecko + DexScreener |
+| 全部/最新熱點/什麼都要 | `all` | 所有 57 個來源 |
+
+## Data Sources（57 個）
+
+### `crypto` — 英文加密主流媒體
+| 來源 | 方法 |
+|------|------|
+| CoinDesk, Decrypt, The Defiant, CoinTelegraph | RSS |
+| CryptoSlate, BeInCrypto, CryptoBriefing, AMBCrypto, Protos | RSS |
+| Wu Blockchain, Unchained Crypto, Centrifuge (RWA) | RSS |
+| CoinGecko Trending Coins + Exchanges | API |
+| DexScreener Boosted Tokens | API |
+
+### `defi` — DeFi / 鏈上分析
+| 來源 | 方法 |
+|------|------|
+| Glassnode Insights, IntoTheBlock | RSS |
+| Aave Blog, Balancer Blog, Synthetix | RSS |
+| Arbitrum, StarkNet, Optimism, WalletConnect, zkSync, Matter Labs | RSS |
+| DexScreener, CoinGecko | API |
+
+### `web3` — Web3 基礎設施
+| 來源 | 方法 |
+|------|------|
+| Arbitrum, StarkNet, Optimism, WalletConnect | RSS |
+| zkSync (Mirror), Matter Labs | RSS |
+| ENS Blog, Glassnode, IntoTheBlock | RSS |
+
+### `cn_crypto` — 中文加密媒體
+| 來源 | 方法 |
+|------|------|
+| PANews 最新文章 + 每日精選 | API |
+| ODaily 快訊 + 深度文章 | RSS |
+| SoPilot (Twitter 中文熱推) | RSS |
+| BlockTempo (動區), Zombit (區塊客) | RSS |
+| CoinPost JP, CoinDesk JP, TokenPost KR | RSS |
+
+### `asia` — 亞洲區域媒體
+| 來源 | 方法 |
+|------|------|
+| CoinPost (日本), CoinDesk Japan | RSS |
+| TokenPost (韓國), BlockTempo, Zombit | RSS |
+
+### `stocks` — 美股/全球股市
+| 來源 | 方法 |
+|------|------|
+| Yahoo Finance, MarketWatch, CNBC Finance | RSS |
+| Financial Times Markets, Seeking Alpha | RSS |
+| BBC Business, Investing.com | RSS |
+| TradingView | RSS |
+
+### `macro` — 外匯/宏觀/利率
+| 來源 | 方法 |
+|------|------|
+| FXStreet, ForexLive | RSS |
+| TradingView | RSS |
+
+### `regulation` — 監管/合規
+| 來源 | 方法 |
+|------|------|
+| Coin Center, CoinTelegraph Regulation | RSS |
+| CryptoNews, Chainalysis Blog | RSS |
+
+### `tech` — 科技/程式
+| 來源 | 方法 |
+|------|------|
+| TechCrunch, ArsTechnica, The Verge, 404 Media, 量子位 | RSS |
+| GitHub Trending | HTML scrape (需 beautifulsoup4) |
+| HackerNews, V2EX | API |
 
 ---
 
 ## Core Workflow
 
-### 1. Trend Discovery
+### 1. Trend Discovery（依 category 抓取）
 
 ```bash
-# Collect all categories and save to DB
-python hotspot-monitor/scripts/collect_trend.py | python hotspot-monitor/scripts/save_to_db.py
+# 只抓美股新聞
+python hotspot-monitor/scripts/collect_trend.py --category stocks
 
-# Crypto only
-python hotspot-monitor/scripts/collect_trend.py --category crypto | python hotspot-monitor/scripts/save_to_db.py
+# 只抓中文加密媒體
+python hotspot-monitor/scripts/collect_trend.py --category cn_crypto
 
-# Tech only
-python hotspot-monitor/scripts/collect_trend.py --category tech | python hotspot-monitor/scripts/save_to_db.py
+# DeFi/鏈上數據
+python hotspot-monitor/scripts/collect_trend.py --category defi
 
-# Last 1 day only (default: 3 days)
-python hotspot-monitor/scripts/collect_trend.py --days 1 | python hotspot-monitor/scripts/save_to_db.py
+# 存入資料庫（推薦）
+python hotspot-monitor/scripts/collect_trend.py --category stocks | python hotspot-monitor/scripts/save_to_db.py
+
+# With English Twitter (requires twitter-buddy running)
+python hotspot-monitor/scripts/collect_trend.py --category all \
+  --twitter-buddy-dir ~/twitter-buddy/data/tweets/ | python hotspot-monitor/scripts/save_to_db.py
 ```
 
 ### 2. Keyword Search
+
+Search a specific term across HackerNews, Reddit, and optionally Exa:
 
 ```bash
 python hotspot-monitor/scripts/collect_keyword.py "Bitcoin ETF" | python hotspot-monitor/scripts/save_to_db.py
 python hotspot-monitor/scripts/collect_keyword.py "Claude Sonnet" --days 7
 ```
-
-Set `EXA_API_KEY` in your environment to also search news and tweets via Exa.
 
 ### 3. Query the Database
 
@@ -85,32 +147,38 @@ python hotspot-monitor/scripts/query_db.py --recent 24
 # Last 48h, crypto only
 python hotspot-monitor/scripts/query_db.py --recent 48 --category crypto
 
+# Filter by source
+python hotspot-monitor/scripts/query_db.py --source coindesk --recent 24
+
 # Search by keyword in title/content
 python hotspot-monitor/scripts/query_db.py --keyword "ETF"
 
-# Database stats + run history
-python hotspot-monitor/scripts/query_db.py --stats --runs
+# Database stats
+python hotspot-monitor/scripts/query_db.py --stats
+
+# Collection run history
+python hotspot-monitor/scripts/query_db.py --runs
 ```
 
 ---
 
 ## Analysis Framework
 
-After collecting data, analyze each item using this framework:
+After collecting data, analyze it yourself using this framework for each item:
 
 ### Authenticity (`is_real`)
 - ✅ **Real**: Specific facts (names, dates, numbers), multiple sources agree, credible outlet
 - ⚠️ **Unverified**: Single source, vague claims, no verifiable details
-- ❌ **Fake**: Contradicts known facts, sensationalist language with no substance
+- ❌ **Fake**: Contradicts known facts, sensationalist language with no substance, clear marketing
 
 ### Relevance (0–100)
-- 80–100: Directly about the topic, key info present
+- 80–100: Directly about the topic, key information present
 - 50–79: Topic mentioned in meaningful context
-- 30–49: Loosely related, same domain
+- 30–49: Loosely related, same domain but not the focus
 - 0–29: Barely related or misleading
 
 ### Importance
-- `urgent`: Breaking news, major market event, exploit, product launch
+- `urgent`: Breaking news, major market event, security exploit, product launch
 - `high`: Significant development that changes the landscape
 - `medium`: Relevant update worth tracking
 - `low`: Background info, minor update
@@ -165,7 +233,7 @@ After collecting data, analyze each item using this framework:
 
 ## Database Schema
 
-SQLite database at `hotspot-monitor/data/hotspots.db` (auto-created on first run):
+The SQLite database (`data/hotspots.db`) has two tables:
 
 **`hotspots`** — main content table
 ```
@@ -174,9 +242,20 @@ category, published_at, importance, summary, keywords,
 relevance, is_real, fetched_at
 ```
 
-**`collection_runs`** — history log
+**`collection_runs`** — collection history log
 ```
 id, run_at, category, sources_used, items_fetched, items_new
+```
+
+After analysis, you can update the DB with your assessments:
+```python
+import sqlite3
+conn = sqlite3.connect("data/hotspots.db")
+conn.execute(
+    "UPDATE hotspots SET importance=?, summary=?, relevance=?, is_real=? WHERE url=?",
+    ("high", "One-sentence summary", 85, 1, "https://...")
+)
+conn.commit()
 ```
 
 ---
@@ -194,9 +273,16 @@ python hotspot-monitor/scripts/query_db.py --recent 24 --pretty
 ```bash
 python hotspot-monitor/scripts/collect_keyword.py "Solana ETF" --days 7 | python hotspot-monitor/scripts/save_to_db.py
 python hotspot-monitor/scripts/query_db.py --keyword "Solana" --recent 168
+# → analyze for relevance and authenticity
 ```
 
 ### Weekly summary
 ```bash
 python hotspot-monitor/scripts/query_db.py --recent 168 --category crypto
+# → summarize the week's crypto hotspots from the database
+```
+
+### Check DB health
+```bash
+python hotspot-monitor/scripts/query_db.py --stats --runs
 ```
