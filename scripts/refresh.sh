@@ -55,7 +55,9 @@ fi
 if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
   "$PY" enrich_ai.py --limit 250 2>&1 | tail -1
   # Rewrite the freshest articles into original, unified-language SEO/GEO content.
-  "$PY" enrich_rewrite.py --limit 80 2>&1 | tail -1
+  # Limit sized above the typical 2h eligible-inflow (+burst headroom) so new
+  # articles don't fall behind; it's capped by actual unrewritten rows anyway.
+  "$PY" enrich_rewrite.py --limit 150 2>&1 | tail -1
   # Translate thin (headline-only) articles' titles so the whole feed is one language.
   "$PY" enrich_titles.py --limit 400 2>&1 | tail -1
 else
