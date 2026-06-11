@@ -164,7 +164,7 @@ function articleLead(md: string | null): string {
 export default function NewsCard({ item }: { item: NewsItem }) {
   const importance = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
   const displayTitle = item.article_title || item.title;
-  const displayText = articleLead(item.article_md) || item.summary || item.content?.slice(0, 160) || '';
+  const displayText = articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 160) || '';
   const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
   const sColor = sourceColor(item.source);
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));

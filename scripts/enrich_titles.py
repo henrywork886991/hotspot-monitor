@@ -32,15 +32,31 @@ DEFAULT_DB = config_loader.db_path()
 BATCH = 15
 
 
-def _translate_batch(titles: list[str]) -> list[str]:
+def _is_translated(t: str) -> bool:
+    """For a zh-Hant target, a real translation is Han-dominant with no Korean and
+    little Japanese kana — catches headlines the model left in the source language."""
+    if not er.REWRITE_LANG.startswith("zh"):
+        return bool(t)
+    han = len(er._HAN.findall(t))
+    return han >= 4 and not er._HANGUL.search(t) and len(er._KANA.findall(t)) <= 2
+
+
+def _translate_batch(items: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Translate (title, summary) pairs into the target language. Returns the same
+    number of (title, summary) pairs, in order; [] on failure."""
     lang = er._OUT_LANG_NAME
-    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(titles))
+    numbered = "\n".join(
+        f"{i+1}. TITLE: {t}\n   SUMMARY: {s[:300]}" for i, (t, s) in enumerate(items)
+    )
     sys_msg = (
-        f"You translate news headlines into {lang}. Keep them faithful and concise; "
-        "keep tickers, names and numbers; no clickbait. If a headline is already in "
-        f"{lang}, just normalise it (and convert any Simplified Chinese to Traditional). "
-        'Return ONLY a JSON object {"titles": [...]} with exactly the same number of '
-        "items, in the same order."
+        f"You translate crypto/finance news into {lang}. For EACH item translate the "
+        "title and the summary, including English/日本語/한국어 ones — the output must "
+        "contain no untranslated source-language words (keep only tickers like BTC and "
+        "brand names like SpaceX). Convert any Simplified Chinese to Traditional. Be "
+        "faithful and concise, no clickbait; the summary stays 1-2 sentences. If a "
+        "summary is empty, return an empty string for it. "
+        'Return ONLY a JSON object {"items": [{"title": "...", "summary": "..."}, ...]} '
+        "with exactly the same number of items, in the same order."
     )
     try:
         r = requests.post(
@@ -52,14 +68,14 @@ def _translate_batch(titles: list[str]) -> list[str]:
                              {"role": "user", "content": numbered}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
-                "max_tokens": 1500,
+                "max_tokens": 2600,
             },
-            timeout=90,
+            timeout=120,
         )
         if r.status_code != 200:
             return []
-        out = json.loads(r.json()["choices"][0]["message"]["content"]).get("titles") or []
-        return [str(t).strip() for t in out]
+        out = json.loads(r.json()["choices"][0]["message"]["content"]).get("items") or []
+        return [(str(o.get("title", "")).strip(), str(o.get("summary", "")).strip()) for o in out]
     except Exception:
         return []
 
@@ -74,16 +90,17 @@ def run(db_path: str, limit: int, workers: int, recheck: bool) -> None:
     conn.row_factory = sqlite3.Row
     # Make sure the column exists (enrich_rewrite owns the canonical schema).
     cols = {row[1] for row in conn.execute("PRAGMA table_info(hotspots)")}
-    if "article_title" not in cols:
-        conn.execute("ALTER TABLE hotspots ADD COLUMN article_title TEXT")
-        conn.commit()
+    for name in ("article_title", "summary_zh"):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE hotspots ADD COLUMN {name} TEXT")
+    conn.commit()
 
     where = ("category != 'markets' AND title != '' "
              "AND length(COALESCE(NULLIF(fulltext,''),content,'')) < ?")
     if not recheck:
         where += " AND (article_title IS NULL OR article_title = '')"
     rows = conn.execute(
-        f"""SELECT id, title FROM hotspots WHERE {where}
+        f"""SELECT id, title, COALESCE(summary,'') AS summary FROM hotspots WHERE {where}
             ORDER BY COALESCE(NULLIF(published_at,''), fetched_at) DESC LIMIT ?""",
         (er.MIN_BODY_CHARS, limit),
     ).fetchall()
@@ -92,22 +109,45 @@ def run(db_path: str, limit: int, workers: int, recheck: bool) -> None:
         conn.close()
         return
 
-    batches = [rows[i:i + BATCH] for i in range(0, len(rows), BATCH)]
+    id_data = {r["id"]: (r["title"], r["summary"]) for r in rows}
 
     def work(batch):
-        out = _translate_batch([r["title"] for r in batch])
+        """Return [(id, title|None, summary)] — None title means failed language check."""
+        out = _translate_batch([id_data[i] for i in batch])
         if len(out) != len(batch):
-            return []
-        return [(b["id"], t) for b, t in zip(batch, out) if t]
+            out = [("", "")] * len(batch)
+        return [(i, (t if _is_translated(t) else None), s) for i, (t, s) in zip(batch, out)]
+
+    def pass_over(ids: list[int], size: int) -> list[int]:
+        """Translate+store the good ones; return the ids that still failed."""
+        nonlocal ok
+        batches = [ids[i:i + size] for i in range(0, len(ids), size)]
+        failed: list[int] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for res in pool.map(work, batches):
+                for rid, t, s in res:
+                    if t:
+                        conn.execute(
+                            "UPDATE hotspots SET article_title=?, summary_zh=? WHERE id=?",
+                            (t[:300], (s[:600] or None), rid))
+                        ok += 1
+                    else:
+                        failed.append(rid)
+                conn.commit()
+                print(f"  translated {ok}/{len(rows)}", file=sys.stderr)
+        return failed
 
     ok = 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for pairs in pool.map(work, batches):
-            for rid, t in pairs:
-                conn.execute("UPDATE hotspots SET article_title=? WHERE id=?", (t[:300], rid))
-                ok += 1
-            conn.commit()
-            print(f"  translated {ok}/{len(rows)}", file=sys.stderr)
+    pending = pass_over(list(id_data), BATCH)
+    # Retry stragglers (often English headlines the model left as-is) in small batches.
+    if pending:
+        print(f"  retrying {len(pending)} untranslated…", file=sys.stderr)
+        still = pass_over(pending, 6)
+        # Clear any stale wrong-language title so it isn't shown and is retried next run.
+        for rid in still:
+            conn.execute("UPDATE hotspots SET article_title=NULL WHERE id=?", (rid,))
+        conn.commit()
+        print(f"  {len(still)} still untranslated → cleared for next run", file=sys.stderr)
     conn.close()
     print(f"Done — translated {ok} thin headlines.", file=sys.stderr)
 

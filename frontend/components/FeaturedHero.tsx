@@ -66,18 +66,26 @@ const styles = css`
   }
 `;
 
+function articleLead(md: string | null): string {
+  if (!md) return '';
+  const lead = md.split('\n').map((l) => l.trim())
+    .find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
+  return lead.replace(/\*\*/g, '');
+}
+
 export default function FeaturedHero({ item }: { item: NewsItem }) {
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));
   const imp = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
   const sColor = sourceColor(item.source);
   const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
-  const text = item.summary ?? item.content?.slice(0, 220) ?? '';
+  const displayTitle = item.article_title || item.title;
+  const text = articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 220) || '';
 
   return (
     <Link href={articlePath(item)} className="hero">
       <div className="hero-img-wrap">
         {imgOk && item.image_url ? (
-          <img className="hero-img" src={item.image_url} alt={item.title} loading="lazy" referrerPolicy="no-referrer" onError={() => setImgOk(false)} />
+          <img className="hero-img" src={item.image_url} alt={displayTitle} loading="lazy" referrerPolicy="no-referrer" onError={() => setImgOk(false)} />
         ) : (
           <div className="hero-fallback" style={{ background: bg }}>
             <span style={{ color: sColor }}>{item.source}</span>
@@ -92,7 +100,7 @@ export default function FeaturedHero({ item }: { item: NewsItem }) {
           <span className="src" style={{ color: sColor }}>{item.source}</span>
           <span className="time">{relTime(item.published_at || item.fetched_at)}</span>
         </div>
-        <h2 className="hero-title">{item.title}</h2>
+        <h2 className="hero-title">{displayTitle}</h2>
         {text && <p className="hero-summary">{text}</p>}
         {item.keywords && (
           <div className="hero-kw">

@@ -22,7 +22,7 @@ interface Props {
   params: Promise<{ category: string; slug: string }>;
 }
 
-function pickDescription(item: { article_md?: string | null; summary: string | null; content: string | null }): string {
+function pickDescription(item: { article_md?: string | null; summary_zh?: string | null; summary: string | null; content: string | null }): string {
   // Prefer the rewritten article's Answer-Box lead so the meta description matches
   // the unified-language body; fall back to the AI summary, then raw content.
   let lead = '';
@@ -33,7 +33,7 @@ function pickDescription(item: { article_md?: string | null; summary: string | n
       .find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
     lead = lead.replace(/\*\*/g, '');
   }
-  const text = lead || item.summary || item.content || '';
+  const text = lead || item.summary_zh || item.summary || item.content || '';
   return text.replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 

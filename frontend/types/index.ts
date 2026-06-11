@@ -32,6 +32,7 @@ export interface NewsItem {
   article_title: string | null;
   article_score: number | null;
   article_words: number | null;
+  summary_zh: string | null;
   relevance: number | null;
   is_real: number | null;
   fetched_at: string;
