@@ -8,6 +8,7 @@ import { CoinPrice } from '@/lib/market-extras';
 import { IMPORTANCE_CONFIG, CATEGORY_BG, sourceColor } from '@/lib/news-style';
 import { coinPath, bydfiSpotUrl } from '@/lib/site';
 import NewsCard from './NewsCard';
+import MarkdownArticle from './MarkdownArticle';
 import css from 'styled-jsx/css';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -38,6 +39,16 @@ const styles = css`
   .hero-fallback span { font-size: 16px; font-weight: 700; text-transform: uppercase; opacity: 0.5; }
   .body { font-size: 16px; line-height: 1.85; color: var(--spec-font-color-1); }
   .body p { margin-bottom: 18px; }
+  .body :global(h2) { font-size: 22px; font-weight: 800; line-height: 1.4; margin: 30px 0 14px; color: var(--spec-font-color-1); }
+  .body :global(h3) { font-size: 18px; font-weight: 700; margin: 24px 0 10px; color: var(--spec-font-color-1); }
+  .body :global(ul) { margin: 0 0 18px; padding-left: 22px; }
+  .body :global(li) { margin-bottom: 8px; line-height: 1.7; }
+  .body :global(strong) { font-weight: 700; color: var(--spec-font-color-1); }
+  .ai-note { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 10px 14px; border-radius: 10px; background: var(--spec-background-color-3); border: 1px solid var(--spec-border-level-2); font-size: 12.5px; color: var(--spec-font-color-3); }
+  .ai-note b { color: var(--spec-font-color-2); font-weight: 700; }
+  :global(.ai-note a) { color: var(--skin-primary-color); }
+  .src-cite { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--spec-border-level-2); font-size: 13px; color: var(--spec-font-color-3); }
+  :global(.src-cite a) { color: var(--skin-primary-color); word-break: break-all; }
   .kw { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
   .kw span { font-size: 12px; padding: 4px 12px; border-radius: 20px; background: var(--spec-background-color-4); color: var(--spec-font-color-2); border: 1px solid var(--spec-border-level-3); }
 
@@ -111,13 +122,20 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
     .map((s) => s.trim())
     .filter(Boolean)
     .map((pair) => ({ pair, base: pair.split('_')[0], quote: pair.split('_')[1] || 'USDT' }));
+  // Tradeable coin chips win — drop keyword chips that duplicate a coin.
+  const tradeBases = new Set(tradePairs.map((t) => t.base.toUpperCase()));
+  const kws = (item.keywords || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => k && !tradeBases.has(k.toUpperCase()))
+    .slice(0, 8);
 
   return (
     <article className="wrap">
       <nav className="crumbs">
         <Link href="/news">首頁</Link><span>/</span>
         <Link href={`/news/${item.category}`}>{catLabel}</Link><span>/</span>
-        <span>{item.title.slice(0, 24)}…</span>
+        <span>{(item.article_title || item.title).slice(0, 24)}…</span>
       </nav>
 
       <div className="meta">
@@ -126,7 +144,7 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
         <time className="time">{fmtDate(item.published_at || item.fetched_at)}</time>
       </div>
 
-      <h1 className="title">{item.title}</h1>
+      <h1 className="title">{item.article_title || item.title}</h1>
 
       {imgOk && item.image_url ? (
         <img className="hero-img" src={item.image_url} alt={item.title} referrerPolicy="no-referrer" onError={() => setImgOk(false)} />
@@ -134,12 +152,28 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
         <div className="hero-fallback" style={{ background: bg }}><span style={{ color: sColor }}>{item.source}</span></div>
       )}
 
-      <div className="body">
-        {paragraphs.length ? paragraphs.map((p, i) => <p key={i}>{p}</p>) : <p>{item.title}</p>}
-      </div>
+      {item.article_md ? (
+        <>
+          <div className="ai-note">
+            <span>✨</span>
+            <span><b>AI 編譯整理</b> · 重點摘要與結構化重寫，原文出處見文末</span>
+          </div>
+          <div className="body">
+            <MarkdownArticle md={item.article_md} />
+            <div className="src-cite">
+              原文出處：<span className="src" style={{ color: sColor }}>{item.source}</span>
+              {item.url && <> · <a href={item.url} target="_blank" rel="noopener noreferrer nofollow">查看原始報導 ↗</a></>}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="body">
+          {paragraphs.length ? paragraphs.map((p, i) => <p key={i}>{p}</p>) : <p>{item.title}</p>}
+        </div>
+      )}
 
-      {item.keywords && (
-        <div className="kw">{item.keywords.split(',').slice(0, 8).map((k) => <span key={k}>{k.trim()}</span>)}</div>
+      {kws.length > 0 && (
+        <div className="kw">{kws.map((k) => <span key={k}>{k}</span>)}</div>
       )}
 
       {tradePairs.length > 0 && (

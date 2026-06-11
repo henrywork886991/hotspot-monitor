@@ -150,9 +150,21 @@ const styles = css`
   }
 `;
 
+// First real paragraph (the Answer-Box lead) of a rewritten article — used as the
+// card snippet so the feed shows the unified-language text, not the source one.
+function articleLead(md: string | null): string {
+  if (!md) return '';
+  const lead = md
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
+  return lead.replace(/\*\*/g, '');
+}
+
 export default function NewsCard({ item }: { item: NewsItem }) {
   const importance = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
-  const displayText = item.summary ?? item.content?.slice(0, 160) ?? '';
+  const displayTitle = item.article_title || item.title;
+  const displayText = articleLead(item.article_md) || item.summary || item.content?.slice(0, 160) || '';
   const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
   const sColor = sourceColor(item.source);
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));
@@ -161,6 +173,13 @@ export default function NewsCard({ item }: { item: NewsItem }) {
     .map((p) => p.split('_')[0].trim())
     .filter(Boolean)
     .slice(0, 3);
+  // Coin badges (bright/tradeable) win — drop any keyword tag that duplicates one.
+  const coinSet = new Set(coins.map((c) => c.toUpperCase()));
+  const kws = (item.keywords || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => k && !coinSet.has(k.toUpperCase()))
+    .slice(0, coins.length ? 2 : 3);
 
   return (
     <div className="news-card">
@@ -170,7 +189,7 @@ export default function NewsCard({ item }: { item: NewsItem }) {
             <img
               className="card-img"
               src={item.image_url}
-              alt={item.title}
+              alt={displayTitle}
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={() => setImgOk(false)}
@@ -197,13 +216,11 @@ export default function NewsCard({ item }: { item: NewsItem }) {
             <span className="source-tag" style={{ color: sColor }}>{item.source}</span>
             <span className="card-date">{relTime(item.published_at || item.fetched_at)}</span>
           </div>
-          <h3 className="card-title">{item.title}</h3>
+          <h3 className="card-title">{displayTitle}</h3>
           {displayText && <p className="card-summary">{displayText}</p>}
-          {item.keywords && (
+          {kws.length > 0 && (
             <div className="card-footer">
-              {item.keywords.split(',').slice(0, coins.length ? 2 : 3).map((kw) => (
-                <span key={kw} className="kw-tag">{kw.trim()}</span>
-              ))}
+              {kws.map((kw) => <span key={kw} className="kw-tag">{kw}</span>)}
             </div>
           )}
         </div>

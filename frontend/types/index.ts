@@ -28,6 +28,10 @@ export interface NewsItem {
   summary: string | null;
   keywords: string | null;
   symbols: string | null;
+  article_md: string | null;
+  article_title: string | null;
+  article_score: number | null;
+  article_words: number | null;
   relevance: number | null;
   is_real: number | null;
   fetched_at: string;

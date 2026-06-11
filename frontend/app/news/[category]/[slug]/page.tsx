@@ -22,8 +22,18 @@ interface Props {
   params: Promise<{ category: string; slug: string }>;
 }
 
-function pickDescription(item: { summary: string | null; content: string | null }): string {
-  const text = item.summary || item.content || '';
+function pickDescription(item: { article_md?: string | null; summary: string | null; content: string | null }): string {
+  // Prefer the rewritten article's Answer-Box lead so the meta description matches
+  // the unified-language body; fall back to the AI summary, then raw content.
+  let lead = '';
+  if (item.article_md) {
+    lead = item.article_md
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
+    lead = lead.replace(/\*\*/g, '');
+  }
+  const text = lead || item.summary || item.content || '';
   return text.replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 
@@ -34,21 +44,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const desc = pickDescription(item);
   const url = SITE_URL + articlePath(item);
+  const displayTitle = item.article_title || item.title;
   // Cover image if we have one; otherwise the branded default OG card so every
   // article still shares with an image (most skip-sources have no scrapable cover).
   const ogImage = item.image_url || `${SITE_URL}/opengraph-image`;
   return {
-    title: `${item.title} — BYDFi Crypto News`,
+    title: `${displayTitle} — BYDFi Crypto News`,
     description: desc,
     alternates: { canonical: url },
     openGraph: {
-      type: 'article', title: item.title, description: desc, url, siteName: SITE_NAME,
+      type: 'article', title: displayTitle, description: desc, url, siteName: SITE_NAME,
       images: [{ url: ogImage }],
       publishedTime: toIso(item.published_at) || undefined,
     },
     twitter: {
       card: 'summary_large_image',
-      title: item.title, description: desc,
+      title: displayTitle, description: desc,
       images: [ogImage],
     },
   };
@@ -70,7 +81,7 @@ export default async function ArticlePage({ params }: Props) {
     '@graph': [
       {
         '@type': 'NewsArticle',
-        headline: item.title.slice(0, 110),
+        headline: (item.article_title || item.title).slice(0, 110),
         description: desc,
         image: item.image_url ? [item.image_url] : undefined,
         datePublished: toIso(item.published_at) || toIso(item.fetched_at),
