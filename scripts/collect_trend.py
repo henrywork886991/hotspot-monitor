@@ -35,6 +35,25 @@ import glob
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from image_filter import is_low_quality_image as _LOW_QUALITY_IMG
+import config_loader
+
+# BYDFi tradeable pairs {BASE: "BASE_QUOTE"} — markets widgets only show/link these.
+def _load_bydfi_symbols() -> dict:
+    try:
+        path = os.path.join(os.path.dirname(config_loader.db_path()), "bydfi_symbols.json")
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+_BYDFI_SYMBOLS = _load_bydfi_symbols()
+_BYDFI_SPOT = "https://www.bydfi.com/en/spot/{}"
+
+def _bydfi_pair(symbol: str) -> str | None:
+    return _BYDFI_SYMBOLS.get((symbol or "").upper().replace("-", "").replace("_", ""))
+
 try:
     from bs4 import BeautifulSoup
     _BS4 = True
@@ -47,6 +66,8 @@ _HEADERS = {
 }
 _ATOM = "{http://www.w3.org/2005/Atom}"
 _DC   = "{http://purl.org/dc/elements/1.1/}"
+_MEDIA   = "{http://search.yahoo.com/mrss/}"
+_CONTENT = "{http://purl.org/rss/1.0/modules/content/}"
 
 # ── Category filter regexes ───────────────────────────────────────────────────
 _CRYPTO_RE = re.compile(
@@ -103,18 +124,53 @@ def _is_relevant(text: str, category: str) -> bool:
 # ── Generic RSS / Atom fetcher ────────────────────────────────────────────────
 
 def _parse_date(s: str) -> datetime | None:
+    """Parse a feed date into a timezone-aware UTC datetime, or None.
+    Naive timestamps (e.g. the literal 'GMT' suffix) are assumed to be UTC so
+    the freshness cutoff in fetch_rss can always compare them."""
+    s = (s or "").strip()
+    if not s:
+        return None
     for fmt in (
         "%a, %d %b %Y %H:%M:%S %z",
         "%a, %d %b %Y %H:%M:%S GMT",
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%SZ",
         "%Y-%m-%dT%H:%M:%S.%f%z",
+        "%Y-%m-%d",
     ):
         try:
-            return datetime.strptime(s.strip(), fmt)
+            dt = datetime.strptime(s, fmt)
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
-    return None
+    # Fallback: robust RFC 2822 parser handles odd timezone spellings
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_image(item, html: str) -> str:
+    """Pull a cover image URL from an RSS item: media:content / media:thumbnail /
+    enclosure(image) / first inline <img>. Skips logo/icon/small images so they
+    fall back to the gradient placeholder rather than upscaling into a blur."""
+    candidates = []
+    for tag in (f"{_MEDIA}content", f"{_MEDIA}thumbnail"):
+        el = item.find(tag)
+        if el is not None and el.get("url"):
+            candidates.append(el.get("url"))
+    enc = item.find("enclosure")
+    if enc is not None and enc.get("url") and "image" in (enc.get("type") or "image"):
+        candidates.append(enc.get("url"))
+    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html or "")
+    if m:
+        candidates.append(m.group(1))
+    for url in candidates:
+        if not _LOW_QUALITY_IMG(url):
+            return url
+    return ""
 
 
 def fetch_rss(url: str, source: str, max_items: int = 15, max_age_days: int = 3,
@@ -142,13 +198,15 @@ def fetch_rss(url: str, source: str, max_items: int = 15, max_age_days: int = 3,
                 link_el = item.find(f"{_ATOM}link")
                 if link_el is not None:
                     link = link_el.get("href", "")
-            desc = (
+            raw_desc = (
                 item.findtext("description")
                 or item.findtext(f"{_ATOM}summary")
                 or item.findtext(f"{_ATOM}content")
                 or ""
             )
-            desc = re.sub(r"<[^>]+>", " ", desc).strip()[:500]
+            content_html = item.findtext(f"{_CONTENT}encoded") or ""
+            image = _extract_image(item, raw_desc + content_html)
+            desc = re.sub(r"<[^>]+>", " ", raw_desc).strip()[:500]
             pub_str = (
                 item.findtext("pubDate")
                 or item.findtext(f"{_ATOM}published")
@@ -156,12 +214,17 @@ def fetch_rss(url: str, source: str, max_items: int = 15, max_age_days: int = 3,
                 or ""
             )
             pub_dt = _parse_date(pub_str)
-            if pub_dt and pub_dt.tzinfo and pub_dt < cutoff:
+            # Drop anything older than the cutoff. Items whose date we genuinely
+            # cannot parse (pub_dt is None) are kept — better a missing date than
+            # silently dropping a fresh article with an exotic format.
+            if pub_dt and pub_dt < cutoff:
                 continue
             results.append({
                 "title": title, "content": desc, "url": link.strip(),
                 "source": source, "source_type": source_type,
-                "published_at": pub_str,
+                "image_url": image,
+                # Normalize to ISO 8601 (UTC) so the DB/frontend can sort reliably
+                "published_at": pub_dt.isoformat() if pub_dt else pub_str,
             })
             if len(results) >= max_items:
                 break
@@ -267,8 +330,22 @@ def fetch_v2ex(category: str = "all") -> list[dict]:
         return []
 
 
+def _fmt_price(p) -> str:
+    """Format a USD price with exchange-style precision (decimals scale to magnitude)."""
+    try:
+        v = float(p)
+    except (TypeError, ValueError):
+        return str(p)
+    if v >= 1:        dp = 2     # BTC 69,780.66 · SOL 79.44
+    elif v >= 0.01:   dp = 4     # 0.6379
+    elif v >= 0.0001: dp = 6     # 0.000123
+    else:             dp = 8     # micro-cap meme tokens
+    return f"${v:,.{dp}f}"
+
+
 def fetch_coingecko() -> list[dict]:
-    """CoinGecko trending coins — free API, updated every ~15 min."""
+    """CoinGecko trending coins — price data only; kept to coins tradeable on BYDFi,
+    linked to the BYDFi spot page (never to CoinGecko/competitors)."""
     try:
         resp = requests.get(
             "https://api.coingecko.com/api/v3/search/trending",
@@ -279,24 +356,66 @@ def fetch_coingecko() -> list[dict]:
         for entry in resp.json().get("coins", []):
             item = entry.get("item", {})
             name, symbol = item.get("name", ""), item.get("symbol", "")
-            rank  = item.get("market_cap_rank", "N/A")
+            pair = _bydfi_pair(symbol)
+            if not pair:
+                continue  # not tradeable on BYDFi — don't show it
             data  = item.get("data", {})
             price = data.get("price", "")
             chg   = data.get("price_change_percentage_24h", {})
             chg_usd = chg.get("usd", "") if isinstance(chg, dict) else ""
-            content = f"Rank: #{rank} | Price: {price}"
-            if chg_usd:
-                content += f" | 24h: {chg_usd:.2f}%"
+            content = f"Price: {_fmt_price(price)}"
+            if chg_usd != "":
+                content += f" | 24h: {float(chg_usd):.2f}%"
             results.append({
-                "title": f"{name} ({symbol}) trending on CoinGecko",
+                "title": f"{name} ({symbol.upper()})",
                 "content": content,
-                "url": f"https://www.coingecko.com/en/coins/{item.get('id', '')}",
-                "source": "coingecko", "source_type": "api",
-                "published_at": "",
+                "url": _BYDFI_SPOT.format(pair),
+                "source": "cg_trending", "source_type": "market",
+                "category": "markets", "symbols": pair, "published_at": "",
             })
         return results
     except Exception as e:
         print(f"[coingecko] ERROR: {e}", file=sys.stderr)
+        return []
+
+
+def fetch_coingecko_movers(max_items: int = 15) -> list[dict]:
+    """Top 24h gainers & losers among BYDFi-tradeable coins (the 抄底/領漲 lists).
+    Source 'cg_gainers' / 'cg_losers'; links to BYDFi spot."""
+    try:
+        resp = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={"vs_currency": "usd", "order": "market_cap_desc",
+                    "per_page": 250, "page": 1, "price_change_percentage": "24h"},
+            headers={"Accept": "application/json"}, timeout=12,
+        )
+        resp.raise_for_status()
+        rows = []
+        for c in resp.json():
+            sym = c.get("symbol", "")
+            pair = _bydfi_pair(sym)
+            chg = c.get("price_change_percentage_24h")
+            if not pair or chg is None:
+                continue
+            rows.append({
+                "name": c.get("name", ""), "sym": sym.upper(), "pair": pair,
+                "price": c.get("current_price", ""), "chg": float(chg),
+            })
+
+        def _mk(r, src):
+            return {
+                "title": f"{r['name']} ({r['sym']})",
+                "content": f"Price: {_fmt_price(r['price'])} | 24h: {r['chg']:.2f}%",
+                "url": _BYDFI_SPOT.format(r["pair"]),
+                "source": src, "source_type": "market",
+                "category": "markets", "symbols": r["pair"], "published_at": "",
+            }
+
+        losers = sorted(rows, key=lambda r: r["chg"])[:max_items]
+        gainers = sorted(rows, key=lambda r: r["chg"], reverse=True)[:max_items]
+        return [_mk(r, "cg_losers") for r in losers] + [_mk(r, "cg_gainers") for r in gainers]
+    except Exception as e:
+        print(f"[coingecko_movers] ERROR: {e}", file=sys.stderr)
         return []
 
 
@@ -390,6 +509,17 @@ _TECH_RSS = [
     ("https://lobste.rs/rss",                           "lobsters",     12),  # 程式社群
     ("https://www.producthunt.com/feed",                "producthunt",  10),  # 新產品/工具
     ("https://www.latent.space/feed",                   "latentspace",  10),  # AI 週報
+    # Validated 2026-06 — broader tech + AI + cybersecurity
+    ("https://www.engadget.com/rss.xml",                "engadget",     10),
+    ("https://www.zdnet.com/news/rss.xml",              "zdnet",        10),
+    ("https://gizmodo.com/rss",                         "gizmodo",       8),
+    ("https://www.theregister.com/headlines.atom",      "theregister",  10),
+    ("https://www.bleepingcomputer.com/feed/",          "bleepingcomputer", 8),  # 資安
+    ("https://feeds.feedburner.com/TheHackersNews",     "thehackernews", 6),     # 資安
+    ("https://hackernoon.com/feed",                     "hackernoon",    8),
+    ("https://venturebeat.com/feed/",                   "venturebeat",   6),
+    ("https://simonwillison.net/atom/everything/",      "simonwillison", 6),     # AI
+    ("https://www.technologyreview.com/feed/",          "mit_tech_review", 6),
 ]
 _CRYPTO_RSS_EXTRA = [
     ("https://cryptoslate.com/feed/",                "cryptoslate",  10),
@@ -398,6 +528,19 @@ _CRYPTO_RSS_EXTRA = [
     ("https://cryptobriefing.com/feed/",              "cryptobriefing", 12),
     ("https://ambcrypto.com/feed/",                  "ambcrypto",    10),
     ("https://protos.com/feed/",                     "protos",       10),
+    # Validated 2026-06 — additional English crypto media
+    ("https://bitcoinmagazine.com/feed",             "bitcoinmagazine", 8),
+    ("https://www.newsbtc.com/feed/",                "newsbtc",       8),
+    ("https://cryptopotato.com/feed/",               "cryptopotato",  8),
+    ("https://u.today/rss",                          "utoday",        8),
+    ("https://dailyhodl.com/feed/",                  "dailyhodl",     8),
+    ("https://bitcoinist.com/feed/",                 "bitcoinist",    8),
+    ("https://coingape.com/feed/",                   "coingape",      8),
+    ("https://watcher.guru/news/feed",               "watcherguru",   8),
+    ("https://zycrypto.com/feed/",                   "zycrypto",      6),
+    ("https://crypto.news/feed/",                    "crypto_news",   8),
+    ("https://cryptodaily.co.uk/feed",               "cryptodaily",   8),
+    ("https://nulltx.com/feed/",                     "nulltx",        6),
 ]
 _REGULATION_RSS = [
     ("https://www.coincenter.org/feed/",             "coin_center",   8),  # weekly — uses _SLOW_AGE
@@ -408,6 +551,7 @@ _REGULATION_RSS = [
 _CHINESE_RSS = [
     ("https://rss.odaily.news/rss/newsflash",         "odaily_flash", 15),
     ("https://rss.odaily.news/rss/post",              "odaily_post",  10),
+    ("https://rss.panewslab.com/zh/tvsq/rss",         "panews_rss",   12),  # PANews 快訊
 ]
 _TECH_CN_RSS = [
     ("https://www.36kr.com/feed",                     "36kr",         12),  # 中文科技/創業媒體
@@ -432,10 +576,16 @@ _WEB3_INFRA_RSS = [
 _DEFI_PROTOCOL_RSS = [
     ("https://medium.com/feed/aave",                "aave_blog",      8),
     ("https://medium.com/feed/balancer-protocol",   "balancer_blog",  8),
+    ("https://medium.com/feed/coinmonks",           "coinmonks",     10),  # DeFi/on-chain explainers
 ]
 _CFD_RSS = [
     ("https://www.fxstreet.com/rss/news",            "fxstreet",     12),
     ("https://www.forexlive.com/feed/news",          "forexlive",    12),
+    # Validated 2026-06 — forex / rates / central banks
+    ("https://www.investing.com/rss/news_1.rss",     "investing_forex",   10),
+    ("https://www.investing.com/rss/news_14.rss",    "investing_economy", 10),
+    ("https://www.forexlive.com/feed/centralbank",   "forexlive_cb",      10),
+    ("https://www.actionforex.com/feed/",            "actionforex",       10),
 ]
 _STOCKS_RSS = [
     ("https://feeds.marketwatch.com/marketwatch/realtimeheadlines/", "marketwatch",  10),
@@ -447,6 +597,13 @@ _STOCKS_RSS_EXTRA = [
     ("https://finance.yahoo.com/news/rssindex",             "yahoo_finance", 15),
     ("https://feeds.bbci.co.uk/news/business/rss.xml",      "bbc_business",  12),
     ("https://www.investing.com/rss/news.rss",              "investing_com", 10),
+    # Validated 2026-06 — equities / market analysis
+    ("https://www.cnbc.com/id/100003114/device/rss/rss.html", "cnbc_top",    10),
+    ("https://www.nasdaq.com/feed/rssoutbound?category=Stocks", "nasdaq",    10),
+    ("https://markets.businessinsider.com/rss/news",        "businessinsider", 8),
+    ("https://www.fool.com/feeds/index.aspx",               "motleyfool",    8),
+    ("https://www.marketbeat.com/feed/",                    "marketbeat",    8),
+    ("https://www.investing.com/rss/news_25.rss",           "investing_stocks", 8),
 ]
 _TA_RSS = [
     ("https://www.tradingview.com/feed/",            "tradingview",  15),
@@ -457,6 +614,11 @@ _REGIONAL_RSS = [
     ("https://www.tokenpost.kr/rss",                 "tokenpost_kr", 10),
     ("https://www.blocktempo.com/feed/",             "blocktempo",   12),
     ("https://zombit.info/feed/",                    "zombit",       10),
+    # Validated 2026-06 — more Japan/Asia crypto media
+    ("https://crypto-times.jp/feed/",                "cryptotimes_jp", 10),
+    ("https://coinchoice.net/feed/",                 "coinchoice_jp",   8),
+    ("https://www.neweconomy.jp/feed",               "neweconomy_jp",   8),
+    ("https://bittimes.net/feed",                    "bittimes_jp",     8),
 ]
 
 
@@ -498,7 +660,8 @@ def fetch_dexscreener(max_items: int = 15) -> list[dict]:
                 "content": desc[:400] or f"Trending token on {chain}",
                 "url": url,
                 "source": "dexscreener",
-                "source_type": "api",
+                "source_type": "market",
+                "category": "markets",
                 "published_at": "",
             })
         return results
@@ -535,7 +698,8 @@ def fetch_coingecko_exchanges(max_items: int = 10) -> list[dict]:
                 "content": content,
                 "url": url,
                 "source": "coingecko_exchanges",
-                "source_type": "api",
+                "source_type": "market",
+                "category": "markets",
                 "published_at": "",
             })
         return results
@@ -650,7 +814,7 @@ def fetch_panews_daily(days: int = 1) -> list[dict]:
 
 _VALID_CATEGORIES = {
     "all", "crypto", "defi", "web3", "cn_crypto",
-    "asia", "stocks", "macro", "regulation", "tech",
+    "asia", "stocks", "macro", "regulation", "tech", "markets",
 }
 
 
@@ -678,14 +842,16 @@ def collect_all(category: str = "all", days: int = 3,
             _rss(_REGULATION_RSS)
             _rss(_CHINESE_RSS)
             _rss(_REGIONAL_RSS)
-            _api("coingecko",           fetch_coingecko)
-            _api("coingecko_exchanges", fetch_coingecko_exchanges)
-            _api("dexscreener",         fetch_dexscreener)
             _api("panews_articles",     fetch_panews_articles)
             _api("panews_daily",        fetch_panews_daily)
             # sopilot is a curated crypto+AI source — skip regex filter to avoid
             # missing Chinese posts that discuss crypto without specific token names
             _api("sopilot",             fetch_sopilot, "all")
+
+        # ── Markets (price data — kept out of the news flow) ─────────────────
+        if C in ("markets", "all"):
+            _api("cg_trending", fetch_coingecko)         # BYDFi-tradeable trending
+            _api("cg_movers",   fetch_coingecko_movers)  # 抄底(losers) + 領漲(gainers)
 
         # ── DeFi / On-chain ──────────────────────────────────────────────────
         if C in ("defi", "all"):
@@ -693,8 +859,6 @@ def collect_all(category: str = "all", days: int = 3,
             _rss(_DERIVATIVES_RSS)
             _rss(_DEFI_PROTOCOL_RSS)
             _rss(_WEB3_INFRA_RSS)
-            _api("dexscreener", fetch_dexscreener)
-            _api("coingecko",   fetch_coingecko)
 
         # ── Web3 Infrastructure ──────────────────────────────────────────────
         if C in ("web3", "all"):
@@ -916,6 +1080,10 @@ Examples:
 
     if args.enrich:
         results = enrich_items(results, max_workers=args.enrich_workers)
+
+    # Attach category to every item so save_to_db.py can persist it
+    for item in results:
+        item.setdefault("category", args.category)
 
     indent = 2 if args.pretty else None
     print(json.dumps(results, ensure_ascii=False, indent=indent))

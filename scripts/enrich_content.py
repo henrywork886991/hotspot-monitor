@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
-enrich_content.py — Fetch full article text for hotspots with missing fulltext.
+enrich_content.py — Fetch full article text for hotspots missing fulltext.
 
-Strategy (per URL):
-  1. Jina Reader (r.jina.ai) — handles JS rendering
-  2. trafilatura             — fast HTML extractor, fallback
-
-Skips API/aggregator sources that don't have article pages.
+Strategy (per URL): trafilatura (fast, local extraction) first, Jina Reader
+(handles JS-heavy pages) as fallback. Runs concurrently. Skips API/social
+sources that have no article body.
 
 Usage:
-  python enrich_content.py                  # enrich up to 100 rows (default)
-  python enrich_content.py --limit 50       # process at most 50 rows
-  python enrich_content.py --source coindesk  # only enrich rows from one source
-  python enrich_content.py --dry-run        # list targets without fetching
-  python enrich_content.py --db /path/db    # custom DB path
+  python enrich_content.py                 # enrich up to 150 newest rows
+  python enrich_content.py --limit 50
+  python enrich_content.py --source coindesk
+  python enrich_content.py --dry-run
 """
 
 import sys
-import time
 import argparse
 import sqlite3
+from copy import deepcopy
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -29,127 +27,125 @@ import config_loader
 
 DEFAULT_DB = config_loader.db_path()
 
-_JINA_BASE = "https://r.jina.ai/"
-_MIN_USEFUL = 300        # chars — below this, text is considered useless
-_MAX_STORE  = 8000       # chars — cap stored fulltext
+_JINA_BASE  = "https://r.jina.ai/"
+_MIN_USEFUL = 350          # chars — below this, try the next extractor
+_MAX_STORE  = 8000         # cap stored fulltext
 
-# API / social sources with no article body to scrape
 _SKIP_SOURCES = frozenset({
     "coingecko", "coingecko_exchanges", "dexscreener",
     "hackernews", "twitter_buddy", "v2ex", "sopilot_twitter",
-    "tradingview", "panews_articles", "panews_daily",
-    "wallstcn",
+    "tradingview", "panews_articles", "panews_daily", "wallstcn",
 })
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/124.0.0.0 Safari/537.36",
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 }
 
+# trafilatura download timeout
+try:
+    import trafilatura
+    from trafilatura.settings import DEFAULT_CONFIG
+    _TRAF_CFG = deepcopy(DEFAULT_CONFIG)
+    _TRAF_CFG["DEFAULT"]["DOWNLOAD_TIMEOUT"] = "12"
+except Exception:  # pragma: no cover
+    trafilatura = None
+    _TRAF_CFG = None
 
-def fetch_fulltext(url: str, timeout: int = 20) -> str | None:
-    """Fetch full article text. Jina first, trafilatura fallback. Returns text or None."""
-    # ── Jina Reader ──────────────────────────────────────────────────────────
+
+def _via_trafilatura(url: str) -> str | None:
+    if trafilatura is None:
+        return None
     try:
-        resp = requests.get(
-            _JINA_BASE + url,
-            headers={**_HEADERS, "X-Return-Format": "text"},
-            timeout=timeout,
-        )
-        if resp.status_code == 200:
-            text = resp.text.strip()
-            if len(text) >= _MIN_USEFUL:
-                return text[:_MAX_STORE]
+        raw = trafilatura.fetch_url(url, config=_TRAF_CFG)
+        if not raw:
+            return None
+        txt = trafilatura.extract(raw, include_comments=False, include_tables=False, config=_TRAF_CFG)
+        if txt and len(txt) >= _MIN_USEFUL:
+            return txt[:_MAX_STORE]
     except Exception:
         pass
-
-    # ── trafilatura fallback ─────────────────────────────────────────────────
-    try:
-        import trafilatura
-        raw = trafilatura.fetch_url(url)
-        if raw:
-            text = trafilatura.extract(raw)
-            if text and len(text) >= _MIN_USEFUL:
-                return text[:_MAX_STORE]
-    except Exception:
-        pass
-
     return None
 
 
-def _ensure_fulltext_column(conn: sqlite3.Connection) -> None:
+def _via_jina(url: str) -> str | None:
+    try:
+        r = requests.get(_JINA_BASE + url, headers={**_HEADERS, "X-Return-Format": "text"}, timeout=20)
+        if r.status_code == 200:
+            txt = r.text.strip()
+            if len(txt) >= _MIN_USEFUL:
+                return txt[:_MAX_STORE]
+    except Exception:
+        pass
+    return None
+
+
+def fetch_fulltext(url: str) -> str | None:
+    return _via_trafilatura(url) or _via_jina(url)
+
+
+def _ensure_column(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(hotspots)")}
     if "fulltext" not in cols:
         conn.execute("ALTER TABLE hotspots ADD COLUMN fulltext TEXT")
         conn.commit()
-        print("[DB] Added fulltext column", file=sys.stderr)
 
 
-def enrich(db_path: str, limit: int, source_filter: str | None, dry_run: bool) -> None:
+def enrich(db_path: str, limit: int, source_filter: str | None, dry_run: bool, workers: int) -> None:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    _ensure_fulltext_column(conn)
+    _ensure_column(conn)
 
-    skip_placeholders = ",".join("?" * len(_SKIP_SOURCES))
-    base_query = f"""
-        SELECT id, url, source, length(content) AS clen
-        FROM hotspots
-        WHERE fulltext IS NULL
-          AND url != ''
-          AND source NOT IN ({skip_placeholders})
+    skip = ",".join("?" * len(_SKIP_SOURCES))
+    query = f"""
+        SELECT id, url, source FROM hotspots
+        WHERE fulltext IS NULL AND url != ''
+          AND (category IS NULL OR category != 'markets')
+          AND source NOT IN ({skip})
     """
     params: list = list(_SKIP_SOURCES)
-
     if source_filter:
-        base_query += " AND source = ?"
+        query += " AND source = ?"
         params.append(source_filter)
-
-    base_query += " ORDER BY id DESC LIMIT ?"
+    # newest first so the freshest articles get full bodies first
+    query += " ORDER BY COALESCE(NULLIF(published_at,''), fetched_at) DESC LIMIT ?"
     params.append(limit)
 
-    rows = conn.execute(base_query, params).fetchall()
+    rows = conn.execute(query, params).fetchall()
     print(f"Rows to enrich: {len(rows)}", file=sys.stderr)
 
+    if dry_run:
+        for r in rows:
+            print(f"  [DRY] {r['source']:20} {r['url'][:72]}")
+        conn.close()
+        return
+
+    def work(row):
+        return row["id"], row["source"], fetch_fulltext(row["url"])
+
     ok = failed = 0
-    for row in rows:
-        url = row["url"]
-        src = row["source"]
-        clen = row["clen"] or 0
-
-        if dry_run:
-            print(f"  [DRY] {src:25} content={clen:4}c  {url[:70]}")
-            continue
-
-        text = fetch_fulltext(url)
-        if text:
-            conn.execute("UPDATE hotspots SET fulltext = ? WHERE id = ?", (text, row["id"]))
-            conn.commit()
-            ok += 1
-            print(f"  [OK  {len(text):5}c] {src:25} {url[:55]}", file=sys.stderr)
-        else:
-            failed += 1
-            print(f"  [FAIL]        {src:25} {url[:55]}", file=sys.stderr)
-
-        time.sleep(0.4)  # polite rate limit
-
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for rid, src, text in pool.map(work, rows):
+            if text:
+                conn.execute("UPDATE hotspots SET fulltext = ? WHERE id = ?", (text, rid))
+                ok += 1
+                print(f"  [OK {len(text):5}c] {src}", file=sys.stderr)
+            else:
+                failed += 1
+    conn.commit()
     conn.close()
-    if not dry_run:
-        print(f"\nDone — enriched: {ok} | failed: {failed}", file=sys.stderr)
+    print(f"\nDone — fulltext added: {ok} | failed: {failed}", file=sys.stderr)
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Enrich hotspot fulltext via Jina + trafilatura")
-    p.add_argument("--db",       default=DEFAULT_DB, help="SQLite DB path")
-    p.add_argument("--limit",    type=int, default=100, metavar="N",
-                   help="Max rows to process (default: 100)")
-    p.add_argument("--source",   metavar="SRC",
-                   help="Only enrich rows from this source (e.g. coindesk)")
-    p.add_argument("--dry-run",  action="store_true",
-                   help="List targets without fetching")
+    p = argparse.ArgumentParser(description="Enrich hotspot fulltext (trafilatura + Jina)")
+    p.add_argument("--db",       default=str(DEFAULT_DB))
+    p.add_argument("--limit",    type=int, default=150, metavar="N")
+    p.add_argument("--source",   metavar="SRC")
+    p.add_argument("--workers",  type=int, default=8, metavar="N")
+    p.add_argument("--dry-run",  action="store_true")
     args = p.parse_args()
-
-    enrich(args.db, args.limit, args.source, args.dry_run)
+    enrich(args.db, args.limit, args.source, args.dry_run, args.workers)
 
 
 if __name__ == "__main__":
