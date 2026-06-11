@@ -250,7 +250,7 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
               <Link key={it.id} href={articlePath(it)} className="trend-row">
                 <span className={`rank${i < 3 ? ' top' : ''}`}>{i + 1}</span>
                 <div className="trend-main">
-                  <div className="trend-title">{it.title}</div>
+                  <div className="trend-title">{it.article_title || it.title}</div>
                   <div className="trend-meta">
                     <span className="s" style={{ color: c }}>{it.source}</span>
                     {' · '}{relTime(it.published_at || it.fetched_at)}
@@ -288,7 +288,7 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
                 <Link key={it.id} href={articlePath(it)} className="flash">
                   <span className="flash-node" style={{ background: dot }} />
                   <div className="flash-time">{clockTime(it.published_at || it.fetched_at)}</div>
-                  <div className="flash-title">{it.title}</div>
+                  <div className="flash-title">{it.article_title || it.title}</div>
                 </Link>
               );
             })}
