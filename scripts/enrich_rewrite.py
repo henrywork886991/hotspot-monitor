@@ -155,9 +155,9 @@ def _sys_prompt(cjk: bool, target_phrase: str, hot_terms: list[str],
     if digest:
         digest_line = (
             "- This source is a NEWS ROUNDUP of several separate stories. Keep each "
-            "distinct story as its own short `## ` section with a specific headline; "
-            "lead the whole piece with one Answer-Box sentence naming the 2-3 biggest "
-            "items. Do not merge unrelated stories.\n"
+            "distinct story as its own short `## ` section written as a 2-4 sentence "
+            "PROSE paragraph (not bullets); lead the whole piece with one Answer-Box "
+            "sentence naming the 2-3 biggest items. Do not merge unrelated stories.\n"
         )
     terms_line = ""
     if hot_terms:
@@ -184,8 +184,14 @@ def _sys_prompt(cjk: bool, target_phrase: str, hot_terms: list[str],
         "<= 40 characters (Chinese) / <= 12 words (English), no clickbait.\n"
         "- Open with a 2-3 sentence ANSWER-BOX paragraph that states the single most "
         "important fact first (the what/number/date), so an AI engine can quote it directly.\n"
-        "- Then use 2-4 Markdown `## ` headings; use `- ` bullet lists for figures, "
-        "dates or multi-point facts where natural.\n"
+        "- Write the body as a real article: FLOWING PROSE PARAGRAPHS of 3-5 sentences "
+        "each, with smooth transitions, like a journalist would write. Organise with "
+        "2-4 Markdown `## ` subheadings; each section is prose, not a list.\n"
+        "- This is the most important rule: DO NOT turn the article into bullet points. "
+        "Use a `- ` bullet list at most ONCE, and only for a genuine enumeration that "
+        "is awkward as a sentence (e.g. several price levels or a list of names). Never "
+        "put a whole section in bullets; weave figures and facts into sentences instead. "
+        "Aim for at least 3 prose paragraphs and few or no bullets.\n"
         + digest_line + terms_line +
         "- Sound like a real human reporter: vary sentence length and rhythm, use "
         "plain confident prose, concrete specifics. A reader must NOT be able to tell "
@@ -263,8 +269,8 @@ def _score(article: str, source: str, cjk: bool, lo: int, hi: int,
     else:
         s_len = 30.0 * max(0.0, 1 - (words - hi) / hi)
 
-    # 2) structure (20): wants >=2 H2; small credit for lists
-    s_struct = min(20.0, h2 * 8 + min(bullets, 3) * 2)
+    # 2) structure (15): wants >=2 H2 subheadings (no credit for bullets — we want prose)
+    s_struct = min(15.0, h2 * 6.0)
 
     # 3) answer-box lead (15): first paragraph is a real 1-3 sentence lead
     s_lead = 0.0
@@ -282,10 +288,10 @@ def _score(article: str, source: str, cjk: bool, lo: int, hi: int,
     orig_ceiling = 0.45 if digest else 0.30
     s_orig = 25.0 * max(0.0, 1 - overlap / orig_ceiling)
 
-    # 5) scannability (10): multiple paragraphs/sections
-    s_scan = min(10.0, (len(paras) >= 3) * 6 + (h2 >= 2) * 4)
+    # 5) prose (15): reward real flowing paragraphs — we want an article, not a listicle
+    s_prose = min(15.0, len(paras) * 4.0)
 
-    base = s_len + s_struct + s_lead + s_orig + s_scan
+    base = s_len + s_struct + s_lead + s_orig + s_prose
 
     # Hard target-language gate: if the output isn't actually in the target language
     # (e.g. Korean/Japanese/English left untranslated), force a failing score so it
@@ -314,7 +320,14 @@ def _score(article: str, source: str, cjk: bool, lo: int, hi: int,
         simp = sum(1 for ch in article if ch in _SIMPLIFIED)
         simp_pen = min(25.0, simp * 2.0)
 
-    total = max(0.0, min(100.0, base - 5.0 * cliches + seo_bonus - simp_pen))
+    # Bullet-dominance penalty: a wall of bullet points reads like an AI listicle, not
+    # an article. Penalise when bullets outnumber prose paragraphs.
+    para_n = len(paras)
+    bullet_pen = 0.0
+    if bullets >= 5 and bullets > para_n:
+        bullet_pen = min(20.0, (bullets - para_n) * 2.5)
+
+    total = max(0.0, min(100.0, base - 5.0 * cliches + seo_bonus - simp_pen - bullet_pen))
     return round(total), words
 
 
