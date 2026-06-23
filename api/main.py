@@ -300,6 +300,134 @@ def sitemap_entries(limit: int = Query(2000, le=5000)):
             (limit,)))}
 
 
+# ================================================================= CMS-compat
+# Endpoints that mirror the existing BYDFi Java CMS contract
+# (`/api/cms/public/frontend/hot-news/*`) so the already-shipped bydfi-ssr
+# crypto-news pages can render OUR data with only a per-call baseURL override.
+# Response envelope: { code, message, data }.  Item shape: HotNewsItem.
+
+import datetime as _dt
+
+
+def _slugify(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:80] or "news"
+
+
+def _epoch_ms(s: str | None) -> int:
+    if not s:
+        return 0
+    try:
+        s2 = s.replace("Z", "+00:00")
+        dt = _dt.datetime.fromisoformat(s2)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+def _coins_array(symbols: str | None) -> list[str]:
+    out, seen = [], set()
+    for p in (symbols or "").split(","):
+        b = p.split("_")[0].strip().upper()
+        if b and b not in seen:
+            seen.add(b)
+            out.append(b)
+    return out
+
+
+def _to_hotnews_item(r: dict) -> dict:
+    title = r.get("article_title") or r.get("title") or ""
+    return {
+        "id": str(r.get("id")),
+        "title": title,
+        "content": r.get("article_md") or r.get("fulltext") or r.get("content") or "",
+        "summary": r.get("summary_zh") or r.get("summary") or "",
+        "alias": f"{_slugify(title)}-{r.get('id')}",
+        "coverImage": r.get("image_url") or "",
+        "sourcePlatform": r.get("source") or "",
+        "sourceUrl": r.get("url") or "",
+        "author": r.get("source") or "",
+        "profilePicture": "",
+        "publishTime": _epoch_ms(r.get("published_at") or r.get("fetched_at")),
+        "moduleCode": "crypto-news",
+        "coins": _coins_array(r.get("symbols")),
+        "aiScore": r.get("article_score") or 0,
+        "viewCount": r.get("view_count") or 0,
+        "likeCount": r.get("like_count") or 0,
+        "lang": "zh_tw",
+        "translationStatus": 1,
+    }
+
+
+_CMS = "/api/cms/public/frontend/hot-news"
+
+
+@app.get(_CMS + "/page")
+def cms_hot_news_page(
+    coin: str | None = None,
+    keyword: str | None = None,
+    order: str | None = None,
+    moduleCode: str | None = None,
+    sourcePlatform: str | None = None,
+    page: int = 1,
+    rows: int = Query(10, le=100),
+    hours: int = 168,
+):
+    conds = ["category != 'markets'", "source != 'sopilot_twitter'",
+             "fetched_at >= datetime('now', ?)"]
+    params: list = [f"-{int(hours)} hours"]
+    if coin and coin.lower() != "all":
+        b = re.sub(r"[^A-Z0-9]", "", coin.upper())
+        conds.append("(',' || symbols) LIKE ? ESCAPE '\\'")
+        params.append(f"%,{b}\\_%")
+    if keyword:
+        conds.append("(title LIKE ? OR summary LIKE ? OR keywords LIKE ?)")
+        params += [f"%{keyword}%"] * 3
+    where = "WHERE " + " AND ".join(conds)
+    # We have no view_count column (Java-only); use AI score as the popularity proxy.
+    order_sql = ("COALESCE(article_score,0) DESC, " if order == "view_count_desc" else "") + \
+        "(published_at IS NOT NULL AND published_at != '') DESC, published_at DESC, fetched_at DESC"
+    offset = (page - 1) * rows
+    with _conn() as c:
+        total = c.execute(f"SELECT COUNT(DISTINCT title) AS cnt FROM hotspots {where}", params).fetchone()["cnt"]
+        items = _rows(c.execute(
+            f"""WITH ranked AS (
+                  SELECT *, ROW_NUMBER() OVER (PARTITION BY title ORDER BY {order_sql}, id DESC) AS rn
+                  FROM hotspots {where}
+                ) SELECT * FROM ranked WHERE rn = 1 ORDER BY {order_sql} LIMIT ? OFFSET ?""",
+            params + [rows, offset]))
+    return {"code": 200, "message": "", "data": {"list": [_to_hotnews_item(r) for r in items], "total": total}}
+
+
+@app.get(_CMS + "/detail")
+def cms_hot_news_detail(id: str | None = None, alias: str | None = None):
+    rid = None
+    if id and id.isdigit():
+        rid = int(id)
+    elif alias:
+        m = re.search(r"-(\d+)$", alias)
+        rid = int(m.group(1)) if m else None
+    if rid is None:
+        return {"code": 200, "message": "", "data": None}
+    with _conn() as c:
+        row = c.execute("SELECT * FROM hotspots WHERE id = ?", (rid,)).fetchone()
+    return {"code": 200, "message": "", "data": _to_hotnews_item(dict(row)) if row else None}
+
+
+@app.get(_CMS + "/coins")
+def cms_hot_news_coins(moduleCode: str | None = None, sourcePlatform: str | None = None):
+    # Coin tabs: most-mentioned bases in the live window (excl. stablecoins).
+    data = hot_coins(limit=12)["coins"]
+    return {"code": 200, "message": "", "data": [c["base"] for c in data]}
+
+
+@app.get(_CMS + "/like/increment")
+def cms_hot_news_like(id: str | None = None):
+    return {"code": 200, "message": "", "data": True}
+
+
 @app.get("/api/health")
 def health():
     with _conn() as c:
