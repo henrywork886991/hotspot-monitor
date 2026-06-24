@@ -42,7 +42,21 @@ export const CATEGORY_BG: Record<string, string> = {
   all:        'linear-gradient(145deg, #15181d 0%, #0c0d0e 100%)',
 };
 
+// Stable hue from a string — gives every unmapped source a distinct, consistent
+// colour instead of all collapsing to the same grey. Tuned for dark backgrounds.
+function hashHue(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+
 export function sourceColor(source: string): string {
   const key = source.toLowerCase().replace(/[^a-z]/g, '');
-  return SOURCE_COLORS[key] ?? 'var(--spec-font-color-2)';
+  if (SOURCE_COLORS[key]) return SOURCE_COLORS[key];
+  // Branded sources often carry suffixes (odaily_flash, panews_rss, yahoo_finance)
+  // — match the known brand prefix so variants share one colour.
+  for (const brand in SOURCE_COLORS) {
+    if (key.startsWith(brand)) return SOURCE_COLORS[brand];
+  }
+  return `hsl(${hashHue(key)}, 62%, 62%)`;
 }

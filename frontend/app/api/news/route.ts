@@ -13,8 +13,9 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
   const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
   const hours = parseInt(searchParams.get('hours') || '72', 10);
+  const readyOnly = searchParams.get('ready') === '1';
 
-  const { items, total } = queryNews({ category, importance, keyword, page, limit, hours });
+  const { items, total } = queryNews({ category, importance, keyword, page, limit, hours, readyOnly });
 
   return NextResponse.json({ items, total, page, limit });
 }

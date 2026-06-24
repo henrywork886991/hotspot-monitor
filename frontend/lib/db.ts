@@ -11,6 +11,10 @@ function getDb() {
   return new Database(DB_PATH, { readonly: true });
 }
 
+// Coins treated as "major" — excluded from the 山寨幣 (altcoin) feed. Covers the
+// dedicated coin tabs plus BNB and the stablecoins (which are quote, not altcoins).
+const ALTCOIN_MAJORS = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'TRX', 'DOGE', 'ADA', 'USDT', 'USDC'];
+
 export interface QueryOptions {
   category?: Category | 'all';
   importance?: string;
@@ -18,10 +22,12 @@ export interface QueryOptions {
   page?: number;
   limit?: number;
   hours?: number;
+  /** Grid gate: only "complete" articles — AI-rewritten AND with a real image. */
+  readyOnly?: boolean;
 }
 
 export function queryNews(opts: QueryOptions = {}): { items: NewsItem[]; total: number } {
-  const { category, importance, keyword, page = 1, limit = 20, hours = 72 } = opts;
+  const { category, importance, keyword, page = 1, limit = 20, hours = 72, readyOnly = false } = opts;
 
   let db: ReturnType<typeof getDb> | null = null;
   try {
@@ -35,7 +41,17 @@ export function queryNews(opts: QueryOptions = {}): { items: NewsItem[]; total: 
   const conditions: string[] = ['fetched_at >= ?'];
   const params: (string | number)[] = [cutoff];
 
-  if (category && category !== 'all') {
+  if (category === 'altcoin') {
+    // 山寨幣 (Altcoin): coin-tagged crypto news that mentions NO major coin —
+    // i.e. everything outside BTC/ETH and the other large caps (which already
+    // have their own tabs). Matches MEXC's "major coins vs. altcoin" framing.
+    conditions.push("category IN ('crypto','cn_crypto','defi','web3')");
+    conditions.push("symbols IS NOT NULL AND symbols != ''");
+    for (const m of ALTCOIN_MAJORS) {
+      conditions.push("(',' || symbols) NOT LIKE ? ESCAPE '\\'");
+      params.push(`%,${m}\\_%`);
+    }
+  } else if (category && category !== 'all') {
     conditions.push('category = ?');
     params.push(category);
   } else {
@@ -52,6 +68,13 @@ export function queryNews(opts: QueryOptions = {}): { items: NewsItem[]; total: 
   }
   // Twitter-handle "news" (title is just the @handle) is low quality — keep it out.
   conditions.push("source != 'sopilot_twitter'");
+  // Publishing gate for the main grid: a card only appears once it's "complete" —
+  // AI-rewritten (article_md) AND carrying a real cover image (og or generated).
+  // Thin/headline-only items (never rewritten) stay in the 24/7 flash list only.
+  if (readyOnly) {
+    conditions.push("article_md IS NOT NULL AND article_md != ''");
+    conditions.push("image_url IS NOT NULL AND image_url != ''");
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -78,6 +101,35 @@ export function queryNews(opts: QueryOptions = {}): { items: NewsItem[]; total: 
 
   db.close();
   return { items, total };
+}
+
+// 24/7 快訊: the raw live stream for the sidebar — newest first, NOT gated by the
+// grid's "complete" rule, so thin/headline-only items still surface here.
+export function getFlash(limit = 30): NewsItem[] {
+  let db: ReturnType<typeof getDb> | null = null;
+  try {
+    db = getDb();
+  } catch {
+    return [];
+  }
+  const cutoff = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
+  const order = `(published_at IS NOT NULL AND published_at != '') DESC, published_at DESC, fetched_at DESC`;
+  const items = db
+    .prepare(
+      `WITH ranked AS (
+         SELECT *, ROW_NUMBER() OVER (PARTITION BY title ORDER BY ${order}, id DESC) AS rn
+         FROM hotspots
+         WHERE fetched_at >= ?
+           AND (category IS NULL OR category != 'markets')
+           AND source != 'sopilot_twitter'
+       )
+       SELECT * FROM ranked WHERE rn = 1
+       ORDER BY ${order}
+       LIMIT ?`
+    )
+    .all(cutoff, limit) as NewsItem[];
+  db.close();
+  return items;
 }
 
 export function queryCategories(): Array<{ key: string; count: number }> {
@@ -247,8 +299,9 @@ export function getTopNews(limit = 12): NewsItem[] {
   return rows;
 }
 
-/** Top coins by article mentions in the live window (for badges / hot list / sitemap). */
-export function getHotCoins(limit = 60): Array<{ base: string; pair: string; count: number }> {
+/** Top coins by article mentions in the live window (for badges / hot list / sitemap).
+ *  With `altcoinOnly`, the majors are dropped so the 山寨幣 page shows only altcoins. */
+export function getHotCoins(limit = 60, opts: { altcoinOnly?: boolean } = {}): Array<{ base: string; pair: string; count: number }> {
   let db: ReturnType<typeof getDb> | null = null;
   try {
     db = getDb();
@@ -266,13 +319,15 @@ export function getHotCoins(limit = 60): Array<{ base: string; pair: string; cou
 
   // Stablecoins are quote currencies, not meaningful "hot coins".
   const STABLE = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDE', 'BUSD', 'USD']);
+  // On the 山寨幣 page, also drop the majors so only altcoins remain.
+  const exclude = opts.altcoinOnly ? new Set([...STABLE, ...ALTCOIN_MAJORS]) : STABLE;
   const counts = new Map<string, { pair: string; count: number }>();
   for (const r of rows) {
     for (const pair of r.symbols.split(',')) {
       const p = pair.trim();
       if (!p) continue;
       const base = p.split('_')[0].toUpperCase();
-      if (STABLE.has(base)) continue;
+      if (exclude.has(base)) continue;
       const cur = counts.get(base);
       if (cur) cur.count += 1;
       else counts.set(base, { pair: p, count: 1 });

@@ -34,8 +34,10 @@ done
 # Drop small/logo cover images (real-dimension check) before filling gaps
 "$PY" validate_images.py --limit 900 2>&1 | tail -1
 "$PY" enrich_images.py --limit 900 2>&1 | tail -1
-# Full article text for the freshest batch (article pages + SEO depth)
-"$PY" enrich_content.py --limit 180 2>&1 | tail -1
+# Full article text for the freshest batch (article pages + SEO depth).
+# No API cost (just scraping) and it's the feeder for the rewrite floor, so we
+# run it wider than the AI stages to keep short-excerpt items from piling up.
+"$PY" enrich_content.py --limit 280 2>&1 | tail -1
 
 # Refresh BYDFi tradeable-coin list weekly (stable; skip if recent).
 if [ ! -f ../data/bydfi_symbols.json ] || [ -n "$(find ../data/bydfi_symbols.json -mtime +6 2>/dev/null)" ]; then
@@ -53,14 +55,28 @@ fi
 "$PY" fetch_btc_history.py 2>&1 | tail -1
 # AI transform (summary + keywords + tradeable coins) via DeepSeek — needs key.
 if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
-  "$PY" enrich_ai.py --limit 250 2>&1 | tail -1
+  "$PY" enrich_ai.py --limit 320 2>&1 | tail -1
   # Rewrite the freshest articles into original, unified-language SEO/GEO content.
   # Limit sized above the typical 2h eligible-inflow (+burst headroom) so new
   # articles don't fall behind; it's capped by actual unrewritten rows anyway.
-  "$PY" enrich_rewrite.py --limit 150 2>&1 | tail -1
+  "$PY" enrich_rewrite.py --limit 220 2>&1 | tail -1
+  # English sibling: original EN article (article_md_en) from the SAME source,
+  # for the /en locale. Forward+recent only (default 72h window), so it tracks the
+  # live feed without back-translating the whole archive.
+  "$PY" enrich_rewrite_en.py --limit 220 2>&1 | tail -1
   # Translate thin (headline-only) articles' titles so the whole feed is one language.
   "$PY" enrich_titles.py --limit 400 2>&1 | tail -1
 else
   echo "  [enrich_ai] skipped (no DEEPSEEK_API_KEY)"
+fi
+
+# Generate original cover images for the freshest still-imageless articles and
+# upload to Cloudinary — quality layer on top of the CSS CoverFallback. Only
+# touches new articles (default last 2 days), so it never backfills the
+# historical no-image rows. Needs both an image-model key and Cloudinary.
+if [ -n "${IMAGE_API_KEY:-}" ] && [ -n "${CLOUDINARY_URL:-}" ]; then
+  "$PY" generate_images.py --limit "${IMG_GEN_LIMIT:-40}" 2>&1 | tail -1
+else
+  echo "  [generate_images] skipped (need IMAGE_API_KEY + CLOUDINARY_URL)"
 fi
 echo "===== done ====="
