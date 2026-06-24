@@ -53,113 +53,111 @@ _API_KEY  = os.environ.get("IMAGE_API_KEY", "")
 _API_BASE = os.environ.get("IMAGE_API_BASE", "").rstrip("/")
 _MODEL    = os.environ.get("IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
-# Variety system (inspired by baoyu-cover-image's multi-dimension idea, adapted to
-# a photoreal news-stock-photo look): each image = Subject × Composition × Lighting
-# × Lens, each dimension picked by a hash of the article id. Many SUBJECTS per
-# category means cn_crypto is no longer always "coins + skyline". No people —
-# AI faces/hands are the biggest "looks fake" tell and the biggest fabrication risk.
-_SUBJECTS = {
+# The image is built to (a) RELATE to the article — its coin tickers and extracted
+# keywords go into the prompt — and (b) look like a REAL press/stock photo, not an
+# AI render. So: grounded real-world subjects only (NO glowing networks, holograms,
+# neon circuits or abstract 3D — those are the "AI/sci-fi" tells), varied by a hash
+# of the article id, with the style line hard-banning render/illustration looks.
+
+# Tickers we can name so the model renders a recognisable coin; others stay generic.
+_COIN_NAMES = {
+    "BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana", "XRP": "XRP", "BNB": "BNB",
+    "DOGE": "Dogecoin", "ADA": "Cardano", "TRX": "TRON", "TON": "Toncoin",
+    "AVAX": "Avalanche", "LINK": "Chainlink", "DOT": "Polkadot", "LTC": "Litecoin",
+    "SHIB": "Shiba Inu", "MATIC": "Polygon", "UNI": "Uniswap", "ATOM": "Cosmos",
+    "XLM": "Stellar", "BCH": "Bitcoin Cash", "HYPE": "Hyperliquid", "SUI": "Sui",
+}
+
+# Subject SCENES per category — varied so the feed isn't all "coins on a table".
+# Crypto scenes use {coin} = the article's lead coin name.
+_CAT_SCENES = {
     "crypto": [
-        "a single physical metallic crypto coin standing upright on a dark reflective stone surface",
-        "a hardware crypto wallet device beside a smartphone on a minimalist desk",
-        "a glowing 3D blockchain network of connected nodes floating in dark space",
-        "rows of server racks with blue indicator lights in a crypto-mining data center",
-        "a multi-monitor trading desk showing green and red crypto candlestick charts",
-        "an abstract financial data visualization, glowing line graphs over a dark gradient",
-        "a small pile of physical crypto coins scattered on weathered wood, city bokeh behind",
-    ],
-    "defi": [
-        "an abstract glowing network of interconnected protocol nodes on a dark background",
-        "a sleek laptop on a modern desk with a holographic finance interface glowing above it",
-        "flowing streams of light representing liquidity against a dark studio backdrop",
-        "a futuristic vault made of glass and light, abstract and clean",
-        "layered translucent glass panels displaying financial graphs, deep perspective",
-        "a smartphone showing a clean fintech app on a soft gradient surface",
+        "{coin} coins scattered across a rustic wooden table",
+        "a towering stack of {coin} coins on a marble desk",
+        "a giant {coin} coin standing like a monument in a city square",
+        "a stylized bull and bear locked in a dramatic face-off",
+        "a rocket shaped like a coin soaring past a skyline",
+        "an ornate bank vault bursting open with gold coins",
+        "a hand holding a phone running a crypto trading app",
+        "a workbench lined with mining-rig graphics cards",
+        "a price chart drawn as a dramatic mountain range",
+        "a treasure chest overflowing with {coin} coins",
     ],
     "stocks": [
-        "a close-up of a stock-market screen showing candlestick charts",
-        "a wide modern trading floor with rows of glowing monitors",
-        "a bronze bull-and-bear sculpture on a polished marble surface",
-        "a financial newspaper spread with reading glasses and a coffee cup on a desk",
-        "a glass skyscraper financial district reflecting the sky, low-angle view",
-        "a glossy upward-trending 3D bar chart rendered on a dark background",
+        "a screen full of candlestick stock charts",
+        "a bustling trading floor seen from above",
+        "a financial newspaper, reading glasses and a coffee cup",
+        "glass office towers soaring against the sky",
+        "a brass bull and bear statue facing off on a desk",
+        "an electronic ticker board of share prices",
     ],
     "macro": [
-        "a vintage globe beside neat stacks of world banknotes on a wooden desk",
-        "a grand central-bank building facade with classical columns",
-        "an aerial view of a shipping port stacked with cargo containers at dawn",
-        "an abstract world map drawn in glowing connection lines on a dark background",
-        "gold bars stacked on a dark reflective surface under dramatic light",
-        "a currency exchange board with softly glowing numbers, shallow focus",
+        "a vintage globe surrounded by world banknotes",
+        "a grand central-bank building with classical columns",
+        "an aerial view of a busy container shipping port",
+        "gold bars stacked on a dark surface",
+        "a currency-exchange counter with a rate board",
+        "a cargo ship crossing the ocean at dawn",
     ],
     "tech": [
-        "an extreme macro of a circuit board with glowing copper traces",
-        "a sleek robotic arm in a clean futuristic laboratory",
-        "a long corridor of glowing server racks in a data center",
-        "a modern workstation with code on multiple screens in a dark room",
-        "an abstract AI neural-network visualization of glowing nodes",
-        "a microchip held in precision tweezers, macro detail",
+        "a close-up of a colourful computer circuit board",
+        "a corridor of humming server racks",
+        "a laptop covered in lines of code on a desk",
+        "a robot arm on an assembly line",
+        "an engineer's bench scattered with gadgets",
+        "a satellite orbiting above the earth",
     ],
     "regulation": [
-        "brass scales of justice on a dark wooden desk",
-        "a classical courthouse facade with tall columns, low-angle",
-        "a wooden judge's gavel resting on a sound block under dramatic light",
-        "stacked legal documents and a fountain pen on a leather desktop",
-        "a government building dome against a moody sky",
-        "an official wax seal embossed on a document, macro",
+        "brass scales of justice on a desk",
+        "a classical courthouse with tall columns",
+        "a wooden gavel resting on its block",
+        "stacks of legal documents and a fountain pen",
+        "a domed government building",
     ],
     "asia": [
-        "a modern East-Asian financial-district skyline at dusk, glass towers",
-        "a neon-lit night street of an Asian metropolis with soft bokeh",
-        "an aerial view of a dense Asian city at blue hour",
-        "a sleek office interior overlooking an Asian harbor skyline",
-        "traditional Asian architecture juxtaposed with modern skyscrapers",
-        "a futuristic Asian train station platform, clean lines",
-    ],
-    "web3": [
-        "an abstract glowing 3D network of connected nodes over a dark studio backdrop",
-        "a futuristic digital landscape of floating geometric blocks",
-        "holographic interface panels glowing in dark space",
-        "an abstract metaverse environment with a neon grid horizon",
-        "interlocking translucent cubes representing a blockchain, deep perspective",
-        "a glowing digital globe wrapped in flowing data streams",
+        "a dazzling Asian city skyline at dusk",
+        "a lively Asian night-market street",
+        "an aerial view of a dense Asian metropolis",
+        "a harbour ringed by skyscrapers in an Asian financial hub",
     ],
 }
-# cn_crypto shares crypto's subjects; "all" pools a broad finance/crypto mix.
-_SUBJECTS["cn_crypto"] = _SUBJECTS["crypto"]
-_SUBJECTS["all"] = _SUBJECTS["crypto"] + _SUBJECTS["stocks"] + _SUBJECTS["macro"]
+_CAT_SCENES["cn_crypto"] = _CAT_SCENES["crypto"]
+_CAT_SCENES["defi"] = _CAT_SCENES["crypto"]
+_CAT_SCENES["web3"] = _CAT_SCENES["crypto"]
+
+# Art-style templates — ONE picked per article (hashed), so the feed mixes
+# hand-drawn / cartoon / anime / retro / watercolour / pop-art / etc.
+_STYLES = [
+    "a hand-drawn ink-and-watercolour illustration with loose expressive lines",
+    "a bold flat-vector editorial illustration with clean shapes and vivid colours",
+    "a friendly cartoon comic illustration with bold outlines, bright and playful",
+    "a Japanese anime-style illustration with crisp cel shading and vivid colour",
+    "a retro 1970s vintage-poster illustration with a warm muted screen-print look",
+    "a lively digital painting with dynamic visible brushstrokes",
+    "a soft watercolour illustration with gentle washes and bleeds",
+    "a papercut layered-paper collage illustration with bright colours",
+    "a pop-art comic illustration with halftone dots and bold saturated colour",
+    "a clean isometric illustration with modern shapes and soft gradients",
+]
 
 _COMPOSITIONS = [
-    "extreme macro close-up, intricate detail filling the frame",
-    "top-down flat-lay composition, neatly arranged",
-    "wide cinematic establishing shot with a deep background",
-    "shallow depth-of-field shot, subject crisp against soft bokeh",
-    "low-angle hero shot, the subject large and imposing",
-    "off-center rule-of-thirds framing with generous negative space",
-    "clean symmetrical centered composition",
+    "a dynamic close-up filling the frame",
+    "a balanced wide establishing view",
+    "a bold low-angle hero composition",
+    "an off-center rule-of-thirds framing with negative space",
+    "a lively top-down view",
+    "an energetic diagonal composition",
 ]
-_LIGHTING = [
-    "warm golden-hour light with long soft shadows",
-    "cool cinematic blue tones and crisp highlights",
-    "bright high-key daylight, airy and clean",
-    "moody low-key lighting with deep shadows and dramatic contrast",
-    "neon accent lighting against a dark scene, modern night mood",
-    "soft diffused window light, natural and understated",
-]
-_LENS = [
-    "shot on an 85mm lens with creamy bokeh",
-    "shot on a 35mm lens, documentary style",
-    "macro lens, razor-sharp focus",
-    "subtle tilt-shift miniature effect",
-    "wide-angle lens, expansive perspective",
+_MOODS = [
+    "warm golden tones",
+    "a cool fresh palette",
+    "bright high-energy colours",
+    "a soft pastel palette",
+    "rich dramatic contrast",
+    "vibrant sunset colours",
 ]
 
-_STYLE = (
-    "Professional editorial stock photograph, photorealistic, highly detailed, "
-    "natural realistic textures, cinematic color grading, 16:9 wide composition. "
-    "No text, no captions, no logos, no watermark, no people, no faces, no hands. "
-    "Tasteful and realistic, not surreal, not an illustration."
-)
+_BANS = "No text, no lettering, no signage, no watermark. 16:9."
 
 
 def _pick(options: list[str], seed: str) -> str:
@@ -168,14 +166,26 @@ def _pick(options: list[str], seed: str) -> str:
     return options[h % len(options)]
 
 
-def _build_prompt(article_id: int, category: str | None) -> str:
-    cat = category if category in _SUBJECTS else "all"
-    subject = _pick(_SUBJECTS[cat], f"{article_id}-subj-{cat}")
-    comp    = _pick(_COMPOSITIONS, f"{article_id}-comp")
-    light   = _pick(_LIGHTING, f"{article_id}-light")
-    lens    = _pick(_LENS, f"{article_id}-lens")
-    subject = subject[0].upper() + subject[1:]
-    return f"{subject}. {comp}. {light}. {lens}. {_STYLE}"
+def _build_prompt(article_id: int, category: str | None,
+                  symbols: str | None, keywords: str | None) -> str:
+    cat = category if category in _CAT_SCENES else "stocks"
+    coins = [s.split("_")[0].strip().upper()
+             for s in (symbols or "").split(",") if s.strip()][:2]
+    coin_name = _COIN_NAMES.get(coins[0], "cryptocurrency") if coins else "cryptocurrency"
+
+    scene = _pick(_CAT_SCENES[cat], f"{article_id}-scene-{cat}").replace("{coin}", coin_name)
+
+    # ASCII coins/keywords carry the article's topic into the image (CJK renders
+    # as garbled text, so it's dropped).
+    kws = [k.strip() for k in (keywords or "").split(",")]
+    kws = [k for k in kws if k and re.fullmatch(r"[A-Za-z0-9 .&/+-]+", k)]
+    rel_terms = (coins + kws)[:3]
+    rel = f", themed around {', '.join(rel_terms)}" if rel_terms else ""
+
+    style = _pick(_STYLES, f"{article_id}-style")
+    comp = _pick(_COMPOSITIONS, f"{article_id}-comp")
+    mood = _pick(_MOODS, f"{article_id}-mood")
+    return f"{style[0].upper() + style[1:]} depicting {scene}{rel}, {comp}, {mood}. {_BANS}"
 
 
 _DATA_URL = re.compile(r"data:image/[a-zA-Z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)")
@@ -355,7 +365,7 @@ def run(db_path: str, limit: int, days: int, workers: int,
     if dry_run:
         for r in rows:
             print(f"\n[{r['id']}] {(r['title'] or '')[:60]}")
-            print("  PROMPT:", _build_prompt(r["id"], r["category"]))
+            print("  PROMPT:", _build_prompt(r["id"], r["category"], r["symbols"], r["keywords"]))
         conn.close()
         return
 
@@ -363,7 +373,7 @@ def run(db_path: str, limit: int, days: int, workers: int,
 
     # status: "ok" | "fail" (permanent — mark tried) | "skip" (transient — retry later)
     def work(row):
-        prompt = _build_prompt(row["id"], row["category"])
+        prompt = _build_prompt(row["id"], row["category"], row["symbols"], row["keywords"])
         try:
             data = _generate(prompt)
         except _TransientError as e:
@@ -405,8 +415,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Generate cover images + upload to Cloudinary")
     p.add_argument("--db",      default=str(DEFAULT_DB))
     p.add_argument("--limit",   type=int, default=40, metavar="N")
-    p.add_argument("--days",    type=int, default=3, metavar="D",
-                   help="only articles fetched within the last D days (matches the 72h feed window)")
+    p.add_argument("--days",    type=int, default=2, metavar="D",
+                   help="only NEW articles fetched within the last D days; never regenerates "
+                        "(img_gen_tried), so older backlog is left alone to save tokens")
     p.add_argument("--workers", type=int, default=4, metavar="N")
     p.add_argument("--prefix",  default=os.environ.get("CLOUDINARY_FOLDER", "covers"))
     p.add_argument("--dry-run", action="store_true")
