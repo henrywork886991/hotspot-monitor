@@ -6,8 +6,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      // Markets is live price data, not indexable content.
-      disallow: ['/api/', '/news/markets'],
+      // Markets is live price data, not indexable content (both locales).
+      disallow: ['/api/', '/zh/news/markets', '/en/news/markets'],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,

@@ -1,8 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { TopIndex } from '@/lib/market-extras';
+import { categoryFullLabel } from '@/lib/site';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import { INTL_LOCALE } from '@/lib/i18n/config';
+import Breadcrumbs from './Breadcrumbs';
 import NewsCard from './NewsCard';
 import DipChart from './DipChart';
 import BacktestTool from './BacktestTool';
@@ -28,8 +32,6 @@ function parse(content: string | null): { price: string; chg: number | null } {
 
 const styles = css`
   .wrap { max-width: var(--const-max-page-width); margin: 0 auto; padding: 28px 32px 56px; }
-  .crumbs { font-size: 13px; color: var(--spec-font-color-3); margin-bottom: 18px; }
-  :global(.crumbs a:hover) { color: var(--skin-primary-color); }
 
   .hero {
     display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: center;
@@ -104,15 +106,21 @@ interface Props {
 }
 
 export default function TopSignalView({ top, snapshot, gainers, topNews, delta, history, sibling }: Props) {
+  const locale = useLocale();
   // GEO-citable fact: consecutive days in the 逃頂 (>=60) zone.
   let streak = 0;
   for (let i = history.length - 1; i >= 0 && history[i].value >= 60; i--) streak++;
   const c = zoneColor(top.value);
-  const updated = top.updated ? new Date(top.updated).toLocaleString('zh-TW', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  const updated = top.updated ? new Date(top.updated).toLocaleString(INTL_LOCALE[locale], { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 
   return (
     <div className="wrap">
-      <nav className="crumbs"><Link href="/news">首頁</Link> / BYDFi 逃頂指數</nav>
+      <Breadcrumbs
+        items={[
+          { name: categoryFullLabel('crypto', locale), href: `/${locale}/news/crypto` },
+          { name: t(locale, 'top.title') },
+        ]}
+      />
 
       <section className="hero">
         <div className="gauge" style={{ ['--c' as string]: c, ['--p' as string]: top.value }}>
@@ -123,14 +131,14 @@ export default function TopSignalView({ top, snapshot, gainers, topNews, delta, 
           </div>
         </div>
         <div>
-          <h1 className="t">BYDFi 逃頂指數</h1>
+          <h1 className="t">{t(locale, 'top.title')}</h1>
           <div className="fired" style={{ ['--c' as string]: c }}>
-            觸發訊號 {top.triggered_count} / {top.total}
+            {t(locale, 'top.triggered', { a: top.triggered_count, b: top.total })}
           </div>
           <p className="snap">{snapshot}</p>
           <div className="updated">
-            更新時間：{updated}（每 2 小時自動計算）
-            {delta !== null && <> · 較昨日 <span style={{ color: delta >= 0 ? 'var(--color-red)' : 'var(--color-green)' }}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}</span></>}
+            {t(locale, 'top.updated', { time: updated })}
+            {delta !== null && <> · {t(locale, 'top.vsYesterday')} <span style={{ color: delta >= 0 ? 'var(--color-red)' : 'var(--color-green)' }}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}</span></>}
           </div>
         </div>
       </section>
@@ -139,19 +147,17 @@ export default function TopSignalView({ top, snapshot, gainers, topNews, delta, 
 
       {history.length >= 2 && (
         <div className="panel">
-          <h2>指數走勢（近 {history.length} 天）</h2>
+          <h2>{t(locale, 'top.chartHeader', { n: history.length })}</h2>
           <div className="sub">
-            {streak > 0
-              ? `已連續 ${streak} 天處於逃頂區間（≥60）`
-              : '近期指數區間變化'}
+            {streak > 0 ? t(locale, 'top.streak', { n: streak }) : t(locale, 'top.recentRange')}
           </div>
           <DipChart history={history} />
         </div>
       )}
 
       <div className="panel">
-        <h2>{top.total} 項核心逃頂訊號</h2>
-        <div className="sub">逐項對照「觸頂閾值」判定 觸/未觸；分數越高代表越接近週期頂部。共 {top.triggered_count} 項已觸發。</div>
+        <h2>{t(locale, 'top.signalsHeader', { n: top.total })}</h2>
+        <div className="sub">{t(locale, 'top.signalsSub', { n: top.triggered_count })}</div>
         {top.signals.map((s) => (
           <div key={s.key} className="sig">
             <span className="cat">{s.category}</span>
@@ -162,21 +168,21 @@ export default function TopSignalView({ top, snapshot, gainers, topNews, delta, 
             <span className="sig-val" style={{ color: s.triggered ? 'var(--color-red)' : undefined }}>{s.value}</span>
             <span className="sig-thr">{s.threshold}</span>
             <span className="sig-bar"><i style={{ width: `${s.heat}%`, background: zoneColor(s.heat) }} /></span>
-            <span className={`badge ${s.triggered ? 'on' : 'off'}`}>{s.triggered ? '觸發' : '未觸'}</span>
+            <span className={`badge ${s.triggered ? 'on' : 'off'}`}>{s.triggered ? t(locale, 'top.triggeredBadge') : t(locale, 'top.notTriggeredBadge')}</span>
           </div>
         ))}
       </div>
 
       <div className="panel">
-        <h2>少虧多少？</h2>
-        <div className="sub">回溯歷史 BTC 行情：如果當時按逃頂訊號離場，你今天會少虧多少。</div>
+        <h2>{t(locale, 'top.backtestTitle')}</h2>
+        <div className="sub">{t(locale, 'top.backtestSub')}</div>
         <BacktestTool mode="top" />
       </div>
 
       {gainers.length > 0 && (
         <div className="panel">
-          <h2>🚀 過熱幣種榜（24h 漲幅最高）</h2>
-          <div className="sub">BYDFi 可交易幣種 · 漲多回調風險高，點擊查看行情</div>
+          <h2>{t(locale, 'top.gainersHeader')}</h2>
+          <div className="sub">{t(locale, 'top.gainersSub')}</div>
           <div className="gainers">
             {gainers.map((it, i) => {
               const { price, chg } = parse(it.content);
@@ -195,8 +201,8 @@ export default function TopSignalView({ top, snapshot, gainers, topNews, delta, 
 
       {topNews.length > 0 && (
         <div className="panel">
-          <h2>📰 過熱情報</h2>
-          <div className="sub">創新高、FOMO、過熱相關新聞</div>
+          <h2>{t(locale, 'top.newsHeader')}</h2>
+          <div className="sub">{t(locale, 'top.newsSub')}</div>
           <div className="news-grid">
             {topNews.slice(0, 8).map((it) => <NewsCard key={it.id} item={it} />)}
           </div>
@@ -204,21 +210,9 @@ export default function TopSignalView({ top, snapshot, gainers, topNews, delta, 
       )}
 
       <div className="panel">
-        <h2>方法論</h2>
-        <p className="method">
-          BYDFi 逃頂指數是 BYDFi News 自有的複合訊號，把<b>頂部專屬指標</b>整合為單一 0–100 指標，並逐項列出是否觸發「觸頂閾值」。涵蓋：
-          <b>鏈上估值</b>（MVRV Z-Score、NUPL、Puell Multiple）、
-          <b>週期模型</b>（Pi Cycle 頂部信號、Mayer Multiple）、
-          <b>市場情緒</b>（恐懼貪婪指數）、
-          <b>衍生品</b>（永續資金費率）、
-          <b>市場結構</b>（BTC 占有率反轉）、
-          以及我們獨家的<b>新聞狂熱度</b>（近 24 小時創新高/FOMO 類新聞佔比）。
-          這不是抄底指數的反向，而是一組獨立的頂部訊號；分數越高、觸發項越多，代表越接近週期頂部、越值得考慮分批獲利了結。
-          資料來源：bitcoin-data.com（鏈上）、Alternative.me、CoinGecko、Binance 與 BYDFi News 新聞流。
-        </p>
-        <p className="disclaimer">
-          ⚠️ 本指數僅供市場參考與教育用途，不構成投資建議。加密貨幣價格波動劇烈，請自行研究並評估風險。
-        </p>
+        <h2>{t(locale, 'top.methodology')}</h2>
+        <p className="method">{t(locale, 'top.methodologyProse')}</p>
+        <p className="disclaimer">{t(locale, 'top.disclaimer')}</p>
       </div>
 
       <style jsx>{styles}</style>

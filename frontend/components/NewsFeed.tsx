@@ -8,6 +8,8 @@ import FeaturedHero from './FeaturedHero';
 import NewsSidebar, { HotCoin } from './NewsSidebar';
 import { DipIndex, TopIndex } from '@/lib/market-extras';
 import TypeFilter from './TypeFilter';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 
 const styles = css`
   .feed-wrap {
@@ -110,12 +112,14 @@ interface NewsFeedProps {
   keyword?: string;
   initialItems?: NewsItem[];
   initialTotal?: number;
+  flashItems?: NewsItem[];
   hotCoins?: HotCoin[];
   dipIndex?: DipIndex | null;
   topIndex?: TopIndex | null;
 }
 
-export default function NewsFeed({ category, keyword, initialItems = [], initialTotal = 0, hotCoins = [], dipIndex, topIndex }: NewsFeedProps) {
+export default function NewsFeed({ category, keyword, initialItems = [], initialTotal = 0, flashItems, hotCoins = [], dipIndex, topIndex }: NewsFeedProps) {
+  const locale = useLocale();
   const [items, setItems] = useState<NewsItem[]>(initialItems);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(2);             // page 1 was server-rendered
@@ -126,7 +130,7 @@ export default function NewsFeed({ category, keyword, initialItems = [], initial
   const fetchNews = useCallback(async (reset = false) => {
     setLoading(true);
     const p = reset ? 1 : page;
-    const params = new URLSearchParams({ category, importance, page: String(p), limit: String(LIMIT) });
+    const params = new URLSearchParams({ category, importance, page: String(p), limit: String(LIMIT), ready: '1' });
     if (keyword) params.set('keyword', keyword);
     try {
       const res = await fetch(`/api/news?${params}`);
@@ -167,8 +171,8 @@ export default function NewsFeed({ category, keyword, initialItems = [], initial
       <div className="feed-header">
         <span className="count-text">
           {keyword
-            ? `「${keyword}」搜尋結果：${total} 條`
-            : (total > 0 ? `共 ${total} 條（最近72小時）` : ' ')}
+            ? t(locale, 'feed.searchResults', { kw: keyword, n: total })
+            : (total > 0 ? t(locale, 'feed.count', { n: total }) : ' ')}
         </span>
         <TypeFilter current={importance} onChange={setImportance} />
       </div>
@@ -177,12 +181,12 @@ export default function NewsFeed({ category, keyword, initialItems = [], initial
         keyword ? (
           <div className="empty-state">
             <p className="empty-icon">🔍</p>
-            <p className="empty-text">找不到符合「{keyword}」的新聞</p>
+            <p className="empty-text">{t(locale, 'feed.emptySearch', { kw: keyword ?? '' })}</p>
           </div>
         ) : (
         <div className="empty-state">
           <p className="empty-icon">📭</p>
-          <p className="empty-text">暫無資料，請先執行資料收集腳本</p>
+          <p className="empty-text">{t(locale, 'feed.emptyData')}</p>
           <code className="empty-hint">python scripts/collect_trend.py | python scripts/save_to_db.py</code>
         </div>
         )
@@ -198,12 +202,12 @@ export default function NewsFeed({ category, keyword, initialItems = [], initial
             </div>
             {hasMore && !loading && (
               <div className="load-more-wrap">
-                <button className="load-more-btn" onClick={() => fetchNews(false)}>查看更多</button>
+                <button className="load-more-btn" onClick={() => fetchNews(false)}>{t(locale, 'feed.loadMore')}</button>
               </div>
             )}
           </div>
 
-          <NewsSidebar items={initialItems} hotCoins={hotCoins} dipIndex={dipIndex} topIndex={topIndex} />
+          <NewsSidebar items={flashItems ?? initialItems} hotCoins={hotCoins} dipIndex={dipIndex} topIndex={topIndex} />
         </div>
       )}
 

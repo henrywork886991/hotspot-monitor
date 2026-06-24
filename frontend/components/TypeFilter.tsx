@@ -1,13 +1,15 @@
 'use client';
 
 import css from 'styled-jsx/css';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 
 const TYPE_OPTIONS = [
-  { key: 'all',    label: '全部'   },
-  { key: 'urgent', label: '🚨 緊急' },
-  { key: 'high',   label: '🔴 重要' },
-  { key: 'medium', label: '🟡 一般' },
-  { key: 'low',    label: '⚪ 快訊' },
+  { key: 'all',    tkey: 'filter.all'    },
+  { key: 'urgent', tkey: 'filter.urgent' },
+  { key: 'high',   tkey: 'filter.high'   },
+  { key: 'medium', tkey: 'filter.medium' },
+  { key: 'low',    tkey: 'filter.low'    },
 ];
 
 const styles = css`
@@ -48,6 +50,7 @@ interface Props {
 }
 
 export default function TypeFilter({ current, onChange }: Props) {
+  const locale = useLocale();
   return (
     <div className="type-filter">
       {TYPE_OPTIONS.map((opt) => (
@@ -56,7 +59,7 @@ export default function TypeFilter({ current, onChange }: Props) {
           className={`type-btn${current === opt.key ? ' active' : ''}`}
           onClick={() => onChange(opt.key)}
         >
-          {opt.label}
+          {t(locale, opt.tkey)}
         </button>
       ))}
       <style jsx>{styles}</style>

@@ -5,6 +5,8 @@ import { coinPath, coinName } from '@/lib/site';
 import { fmtPct } from '@/lib/format';
 import { CoinPrice } from '@/lib/market-extras';
 import { HotCoin } from './NewsSidebar';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 import css from 'styled-jsx/css';
 
 const styles = css`
@@ -31,18 +33,19 @@ const styles = css`
 export default function CoinChips({ coins, prices = {}, label }: {
   coins: HotCoin[]; prices?: Record<string, CoinPrice>; label: string;
 }) {
+  const locale = useLocale();
   if (coins.length === 0) return null;
   return (
     <div className="strip">
       <div className="head">
-        <span className="title">🔥 {label} 熱門幣種</span>
-        <span className="sub">點任一幣種查看聚合新聞與即時行情</span>
+        <span className="title">{t(locale, 'chips.title', { label })}</span>
+        <span className="sub">{t(locale, 'chips.subtitle')}</span>
       </div>
       <div className="row">
         {coins.map((c) => {
           const chg = prices[c.base.toUpperCase()]?.pct24h;
           return (
-            <Link key={c.base} href={coinPath(c.base)} className="cc-chip" title={`${coinName(c.base)} 相關新聞與交易`}>
+            <Link key={c.base} href={coinPath(c.base, locale)} className="cc-chip" title={t(locale, 'card.coinTitle', { c: coinName(c.base) })}>
               <span className="cc-base">{c.base}</span>
               <span className="cc-count">{c.count}</span>
               {chg != null && (

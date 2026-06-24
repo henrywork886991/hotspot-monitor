@@ -2,6 +2,7 @@ export type Importance = 'urgent' | 'high' | 'medium' | 'low';
 
 export type Category =
   | 'all'
+  | 'altcoin'
   | 'crypto'
   | 'defi'
   | 'web3'
@@ -32,6 +33,10 @@ export interface NewsItem {
   article_title: string | null;
   article_score: number | null;
   article_words: number | null;
+  article_md_en: string | null;
+  article_title_en: string | null;
+  article_score_en: number | null;
+  article_words_en: number | null;
   summary_zh: string | null;
   relevance: number | null;
   is_real: number | null;

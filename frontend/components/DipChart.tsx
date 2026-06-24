@@ -1,6 +1,8 @@
 'use client';
 
 import css from 'styled-jsx/css';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 
 interface Pt { date: string; value: number }
 
@@ -23,6 +25,7 @@ const styles = css`
 `;
 
 export default function DipChart({ history }: { history: Pt[] }) {
+  const locale = useLocale();
   if (history.length < 2) return null;
   const n = history.length;
   const innerW = W - PAD_L - PAD_R;
@@ -39,7 +42,7 @@ export default function DipChart({ history }: { history: Pt[] }) {
 
   return (
     <div className="chart-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="BYDFi 抄底指數 90 天走勢">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={t(locale, 'chart.dipAria')}>
         <defs>
           <linearGradient id="dipArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lastC} stopOpacity="0.28" />
@@ -69,10 +72,10 @@ export default function DipChart({ history }: { history: Pt[] }) {
       </svg>
 
       <div className="legend">
-        <span><i style={{ background: '#0ecb81' }} />≥75 強烈抄底</span>
-        <span><i style={{ background: '#9acd32' }} />60–75 抄底區間</span>
-        <span><i style={{ background: '#f6a623' }} />45–60 中性</span>
-        <span><i style={{ background: '#f6465d' }} />&lt;45 偏熱/貪婪</span>
+        <span><i style={{ background: '#0ecb81' }} />{t(locale, 'chart.dipZone1')}</span>
+        <span><i style={{ background: '#9acd32' }} />{t(locale, 'chart.dipZone2')}</span>
+        <span><i style={{ background: '#f6a623' }} />{t(locale, 'chart.dipZone3')}</span>
+        <span><i style={{ background: '#f6465d' }} />{t(locale, 'chart.dipZone4')}</span>
       </div>
 
       <style jsx>{styles}</style>

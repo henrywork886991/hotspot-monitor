@@ -1,6 +1,8 @@
 /* Shared date helpers. SQLite stores naive-UTC timestamps ("2026-06-02 02:00:00")
    which JS would otherwise parse as local time — normalize to a real UTC instant. */
 
+import { type Locale, DEFAULT_LOCALE, INTL_LOCALE } from './i18n/config';
+
 export function parseUtc(dateStr: string): number {
   const s = dateStr.trim();
   // RFC 822 ("Wed, 03 Jun 2026 07:43:43 GMT") — JS Date parses these natively.
@@ -11,7 +13,7 @@ export function parseUtc(dateStr: string): number {
 }
 
 /** Relative time: "now", "25m", "3h", or "Jun 2". */
-export function relTime(dateStr: string | null): string {
+export function relTime(dateStr: string | null, locale: Locale = DEFAULT_LOCALE): string {
   if (!dateStr) return '';
   const t = parseUtc(dateStr);
   if (Number.isNaN(t)) return '';
@@ -20,15 +22,15 @@ export function relTime(dateStr: string | null): string {
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
-  return new Date(t).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+  return new Date(t).toLocaleDateString(INTL_LOCALE[locale], { month: 'short', day: 'numeric' });
 }
 
 /** Wall-clock "HH:MM" for the live flash feed. */
-export function clockTime(dateStr: string | null): string {
+export function clockTime(dateStr: string | null, locale: Locale = DEFAULT_LOCALE): string {
   if (!dateStr) return '';
   const t = parseUtc(dateStr);
   if (Number.isNaN(t)) return '';
-  return new Date(t).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(t).toLocaleTimeString(INTL_LOCALE[locale], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 /** USD price with exchange-style precision (decimals scale to magnitude). */

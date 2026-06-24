@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Google 搜尋外觀稽核報告 — BYDFi Crypto News</title>
+<style>
+  :root{
+    --bg:#0b0e11; --card:#15181d; --card2:#1c2026; --line:#2a2f37;
+    --fg:#e8eaed; --mut:#9aa3ad; --dim:#6b7480;
+    --pri:#ffd30f; --green:#16c784; --red:#ea3943; --blue:#4c8dff; --gray:#6b7480;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"PingFang TC","Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 24px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:32px}
+  h1{font-size:28px;font-weight:800;margin:0 0 8px}
+  h2{font-size:20px;font-weight:800;margin:40px 0 16px;display:flex;align-items:center;gap:10px}
+  .sub{color:var(--mut);font-size:14px}
+  .note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--pri);border-radius:8px;padding:14px 18px;margin:18px 0;font-size:13.5px;color:var(--mut)}
+  .note b{color:var(--fg)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center}
+  .stat .n{font-size:34px;font-weight:800;line-height:1}
+  .stat .l{font-size:12.5px;color:var(--mut);margin-top:8px}
+  .n.green{color:var(--green)} .n.pri{color:var(--pri)} .n.blue{color:var(--blue)} .n.gray{color:var(--gray)}
+  table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:14px}
+  th{text-align:left;color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-ok{background:rgba(22,199,132,.14);color:var(--green)}
+  .b-new{background:rgba(255,211,15,.16);color:var(--pri)}
+  .b-warn{background:rgba(234,57,57,.14);color:var(--red)}
+  .b-na{background:rgba(107,116,128,.18);color:var(--gray)}
+  .b-soon{background:rgba(76,141,255,.16);color:var(--blue)}
+  code{background:var(--card2);padding:2px 6px;border-radius:5px;font-size:12.5px;color:#ffe27a}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 20px;margin:8px 0}
+  .fix{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .fix h3{margin:0 0 6px;font-size:15.5px}
+  .fix .tag{font-size:11.5px;color:var(--green);font-weight:700}
+  .fix pre{background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;font-size:12.5px;color:#cfd6df;margin:10px 0 0}
+  ul.clean{margin:8px 0;padding-left:20px;color:var(--mut)}
+  ul.clean li{margin:5px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0;font-size:12.5px;color:var(--mut)}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
+  .verdict{background:linear-gradient(120% 120% at 0 0,rgba(255,211,15,.10),transparent 60%),var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin:20px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔍 Google 搜尋外觀稽核報告</h1>
+    <div class="sub">BYDFi Crypto News 原型 · 稽核日期 2026-06-23 · 對照 <a style="color:var(--blue)" href="https://developers.google.com/search/docs/appearance">Google Search Appearance</a> 全清單</div>
+  </header>
+
+  <div class="note">
+    <b>方法與前提：</b>逐頁抓取 dev server 實際輸出的 HTML(<code>/news</code>、<code>/news/crypto</code>、<code>/news/altcoin</code>、文章頁、<code>/coin/BTC</code>、<code>/dip-index</code>、<code>/top-signal</code>、<code>robots.txt</code>、<code>sitemap.xml</code>),解析其 <code>&lt;title&gt;</code>、meta、canonical、OG/Twitter、JSON-LD 結構化資料。<b>注意：</b>Google 官方 Rich Results Test / PageSpeed 無法抓 <code>localhost</code>,故此為「原始碼／渲染 HTML 層級」稽核;Core Web Vitals 與官方驗證需部署到公開網址後再跑。
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n green">15</div><div class="l">已實作 / 合規</div></div>
+    <div class="stat"><div class="n pri">2</div><div class="l">本次新補強</div></div>
+    <div class="stat"><div class="n blue">3</div><div class="l">待部署後驗證</div></div>
+    <div class="stat"><div class="n gray">3</div><div class="l">缺口(已知)</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="badge b-ok">✓ 已就緒</span>
+    <span class="badge b-new">★ 本次新增</span>
+    <span class="badge b-warn">✗ 缺口</span>
+    <span class="badge b-soon">◷ 部署後驗證</span>
+    <span class="badge b-na">— 不適用</span>
+  </div>
+
+  <h2>★ 本次補強(已套用並驗證)</h2>
+
+  <div class="fix">
+    <div class="tag">★ FIX 1 — 已生效</div>
+    <h3>列表頁 Canonical</h3>
+    <div class="sub" style="color:var(--mut)"><code>/news</code>、<code>/news/crypto</code>、<code>/news/altcoin</code> 原本沒有 canonical。已補自我指向的絕對 canonical,把 <code>?q=</code> 搜尋與分頁變體收斂到乾淨 URL,避免重複內容稀釋排名。</div>
+    <pre>/news        → &lt;link rel="canonical" href="https://news.bydfi.com/news"&gt;
+/news/crypto → &lt;link rel="canonical" href="https://news.bydfi.com/news/crypto"&gt;
+/news/altcoin→ &lt;link rel="canonical" href="https://news.bydfi.com/news/altcoin"&gt;</pre>
+  </div>
+
+  <div class="fix">
+    <div class="tag">★ FIX 2 — 已生效</div>
+    <h3>WebSite SearchAction(Sitelinks 搜尋框標記)</h3>
+    <div class="sub" style="color:var(--mut)">站內已有搜尋(<code>/news?q=</code>),但 WebSite schema 缺 <code>SearchAction</code>。已補上,讓 Google 能識別站內搜尋入口。</div>
+    <pre>"potentialAction": {
+  "@type": "SearchAction",
+  "target": { "@type": "EntryPoint",
+    "urlTemplate": "https://news.bydfi.com/news?q={search_term_string}" },
+  "query-input": "required name=search_term_string"
+}</pre>
+  </div>
+
+  <h2>✅ 已就緒(可拿 Rich Result)</h2>
+  <div class="card">
+  <table>
+    <tr><th>功能</th><th>狀態</th><th>實測證據</th></tr>
+    <tr><td>Title links</td><td><span class="badge b-ok">✓</span></td><td>每頁唯一、語意清楚的 <code>&lt;title&gt;</code></td></tr>
+    <tr><td>Snippets / meta description</td><td><span class="badge b-ok">✓</span></td><td>每頁皆有 description</td></tr>
+    <tr><td><b>Article</b>(NewsArticle)</td><td><span class="badge b-ok">✓ 完整</span></td><td>headline / image / datePublished / dateModified / author / publisher(含 logo)/ mainEntityOfPage / keywords / isBasedOn 全齊</td></tr>
+    <tr><td>Breadcrumb</td><td><span class="badge b-ok">✓</span></td><td>文章/幣種/抄底/逃頂頁皆合規(賽道→幣對→新聞)</td></tr>
+    <tr><td>Dataset</td><td><span class="badge b-ok">✓</span></td><td><code>/dip-index</code>、<code>/top-signal</code> 原創命名數據資產</td></tr>
+    <tr><td>FAQ(FAQPage)</td><td><span class="badge b-ok">✓</span></td><td>幣種頁</td></tr>
+    <tr><td>Organization + Site name</td><td><span class="badge b-ok">✓</span></td><td>WebSite + Organization(name + logo)</td></tr>
+    <tr><td>Carousel(ItemList)</td><td><span class="badge b-ok">✓</span></td><td>幣種頁 CollectionPage + ItemList</td></tr>
+    <tr><td>Favicon</td><td><span class="badge b-ok">✓</span></td><td><code>/favicon.ico</code></td></tr>
+    <tr><td>Publication dates</td><td><span class="badge b-ok">✓</span></td><td>Article datePublished/dateModified + 可見日期</td></tr>
+    <tr><td>Sitemap</td><td><span class="badge b-ok">✓</span></td><td><b>2,125 URL</b>(文章 2,010 + 幣種 112 + 指標頁),含 lastmod/changefreq/priority</td></tr>
+    <tr><td>robots.txt</td><td><span class="badge b-ok">✓</span></td><td>Allow / + Disallow /api、/news/markets + Host + Sitemap</td></tr>
+    <tr><td>Open Graph / Twitter card</td><td><span class="badge b-ok">✓</span></td><td>內容頁 <code>summary_large_image</code> + 動態 OG 圖;指標頁 <code>summary</code></td></tr>
+    <tr><td>Mobile / viewport</td><td><span class="badge b-ok">✓</span></td><td>viewport meta 正確,全站 SSR</td></tr>
+  </table>
+  </div>
+
+  <h2>✗ 仍存在的缺口</h2>
+  <div class="card">
+  <table>
+    <tr><th>項目</th><th>狀態</th><th>說明 / 建議</th></tr>
+    <tr><td>hreflang / 多語</td><td><span class="badge b-warn">✗</span></td><td>單語 zh-TW;無 i18n。屬移植 bydfi-ssr(已有 /zh /en)時再接的缺口</td></tr>
+    <tr><td>Image license metadata</td><td><span class="badge b-warn">✗</span></td><td>封面多為第三方來源、版權不明 → 建議只對自產(Imagen)封面補 license,第三方不標</td></tr>
+    <tr><td>Speakable</td><td><span class="badge b-warn">✗</span></td><td>新聞可選配(語音助理),效益有限,可延後</td></tr>
+  </table>
+  </div>
+
+  <h2>◷ 需部署到公開網址後驗證</h2>
+  <ul class="clean">
+    <li><b>Core Web Vitals / Page Experience</b> — 需 Lighthouse / PageSpeed 跑公開網址。架構面有利(SSR + Turbopack、無重型圖表庫、SVG 自繪走勢圖),但 LCP/CLS 要實測。</li>
+    <li><b>官方 Rich Results Test</b> — <code>localhost</code> 抓不到;部署後可逐頁跑驗證 Article / Breadcrumb / Dataset / FAQ。</li>
+    <li><b>Discover / AI Overviews / Preferred sources</b> — 資格制無法「實作」,但內容已具備條件(大圖、即時、結構化、有事實/日期)。</li>
+  </ul>
+
+  <h2>— 不適用(內容類型不符)</h2>
+  <ul class="clean">
+    <li>Product / Review / Merchant listing / Return &amp; Shipping policy / Loyalty</li>
+    <li>Event / Job posting / Recipe / Course / Movie / Local Business / Vacation Rental</li>
+    <li>Q&amp;A Page / Profile Page / Discussion Forum / Education Q&amp;A / Fact Check / Math Solver</li>
+    <li>Video / Web Stories / AMP</li>
+  </ul>
+
+  <div class="verdict">
+    <h2 style="margin-top:0">結論</h2>
+    <p style="margin:0 0 10px">整體 <b>結構化資料覆蓋度很高</b>:核心 rich result(Article、Breadcrumb、Dataset、FAQ、Organization、Carousel、Sitemap)全部到位且欄位完整,以原型而言 SEO / GEO 基礎扎實。</p>
+    <p style="margin:0">本次已補上兩個低成本高價值項目(<b>列表頁 canonical</b>、<b>WebSite SearchAction</b>)。剩餘缺口(hreflang、image license、speakable)多屬移植階段或低優先;真正待辦是 <b>部署後跑官方驗證 + 量 Core Web Vitals</b>。</p>
+  </div>
+
+  <footer>
+    自動產生於 2026-06-23 · 對照 Google Search Central「Search Appearance」文件 · 稽核對象:hotspot-monitor 前端(Next.js App Router, SSR)
+  </footer>
+</div>
+</body>
+</html>

@@ -11,7 +11,7 @@ Categories:
   cn_crypto   — Chinese crypto media (PANews, ODaily, BlockTempo, SoPilot…)
   asia        — Asian regional media (JP, KR, TW)
   stocks      — US/global equity markets (Yahoo Finance, MarketWatch, CNBC…)
-  macro       — Forex, rates, macro (FXStreet, ForexLive, TradingView…)
+  macro       — Forex, rates, macro (FXStreet, ForexLive…)
   regulation  — Crypto regulation (Coin Center, CoinTelegraph Reg, Chainalysis…)
   tech        — Tech/programming (TechCrunch, ArsTechnica, HackerNews, GitHub…)
 
@@ -605,9 +605,11 @@ _STOCKS_RSS_EXTRA = [
     ("https://www.marketbeat.com/feed/",                    "marketbeat",    8),
     ("https://www.investing.com/rss/news_25.rss",           "investing_stocks", 8),
 ]
-_TA_RSS = [
-    ("https://www.tradingview.com/feed/",            "tradingview",  15),
-]
+# TradingView /feed/ is user-generated chart "ideas" (UGC) — broken-English
+# one-liners on random tickers, not news. Removed 2026-06: too thin to rewrite
+# (most fall under the rewrite floor and render as bare stubs) and it mis-fires
+# the urgent classifier (e.g. "world war news" in a chart note). See refresh.sh.
+_TA_RSS: list = []
 _REGIONAL_RSS = [
     ("https://coinpost.jp/?feed=rss2",               "coinpost_jp",  10),
     ("https://www.coindeskjapan.com/feed/",          "coindesk_jp",  10),

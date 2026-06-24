@@ -4,8 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { relTime } from '@/lib/format';
-import { IMPORTANCE_CONFIG, CATEGORY_BG, sourceColor } from '@/lib/news-style';
+import { IMPORTANCE_CONFIG, sourceColor } from '@/lib/news-style';
 import { articlePath } from '@/lib/site';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import CoverFallback from '@/components/CoverFallback';
 import css from 'styled-jsx/css';
 
 const styles = css`
@@ -27,11 +30,6 @@ const styles = css`
   }
   .hero-img-wrap { position: relative; overflow: hidden; }
   .hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .hero-fallback {
-    width: 100%; height: 100%; min-height: 220px;
-    display: flex; align-items: flex-end; padding: 16px 18px;
-  }
-  .hero-fallback span { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.5; }
   .feat-badge {
     position: absolute; top: 14px; left: 14px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
@@ -74,31 +72,32 @@ function articleLead(md: string | null): string {
 }
 
 export default function FeaturedHero({ item }: { item: NewsItem }) {
+  const locale = useLocale();
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));
   const imp = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
   const sColor = sourceColor(item.source);
-  const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
-  const displayTitle = item.article_title || item.title;
-  const text = articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 220) || '';
+  const isEn = locale === 'en';
+  const displayTitle = isEn ? (item.article_title_en || item.title) : (item.article_title || item.title);
+  const text = isEn
+    ? (articleLead(item.article_md_en) || item.summary || item.content?.slice(0, 220) || '')
+    : (articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 220) || '');
 
   return (
-    <Link href={articlePath(item)} className="hero">
+    <Link href={articlePath(item, locale)} className="hero">
       <div className="hero-img-wrap">
         {imgOk && item.image_url ? (
           <img className="hero-img" src={item.image_url} alt={displayTitle} loading="lazy" referrerPolicy="no-referrer" onError={() => setImgOk(false)} />
         ) : (
-          <div className="hero-fallback" style={{ background: bg }}>
-            <span style={{ color: sColor }}>{item.source}</span>
-          </div>
+          <CoverFallback item={item} variant="hero" />
         )}
-        <span className="feat-badge">焦點</span>
+        <span className="feat-badge">{t(locale, 'hero.featured')}</span>
       </div>
 
       <div className="hero-body">
         <div className="hero-meta">
           {imp && <span className="imp" style={{ color: imp.color, background: imp.bg }}>{imp.label}</span>}
           <span className="src" style={{ color: sColor }}>{item.source}</span>
-          <span className="time">{relTime(item.published_at || item.fetched_at)}</span>
+          <span className="time">{relTime(item.published_at || item.fetched_at, locale)}</span>
         </div>
         <h2 className="hero-title">{displayTitle}</h2>
         {text && <p className="hero-summary">{text}</p>}

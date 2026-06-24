@@ -5,38 +5,35 @@ import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { parseUtc, fmtPct } from '@/lib/format';
 import { CoinPrice } from '@/lib/market-extras';
-import { IMPORTANCE_CONFIG, CATEGORY_BG, sourceColor } from '@/lib/news-style';
-import { coinPath, bydfiSpotUrl } from '@/lib/site';
+import { IMPORTANCE_CONFIG, sourceColor } from '@/lib/news-style';
+import { coinPath, bydfiSpotUrl, categoryFullLabel } from '@/lib/site';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import { INTL_LOCALE, type Locale } from '@/lib/i18n/config';
+import Breadcrumbs from './Breadcrumbs';
+import CoverFallback from './CoverFallback';
 import NewsCard from './NewsCard';
 import MarkdownArticle from './MarkdownArticle';
 import css from 'styled-jsx/css';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  crypto: 'Crypto 加密貨幣', defi: 'DeFi', web3: 'Web3', cn_crypto: '中文幣圈',
-  asia: '亞洲市場', stocks: '美股', macro: '宏觀經濟', regulation: '監管合規', tech: '科技 & AI',
-};
 const SIGNUP_URL = 'https://www.bydfi.com/en/register';
 
-function fmtDate(s: string | null): string {
+function fmtDate(s: string | null, locale: Locale): string {
   if (!s) return '';
-  const t = parseUtc(s);
-  if (Number.isNaN(t)) return '';
-  return new Date(t).toLocaleString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const ts = parseUtc(s);
+  if (Number.isNaN(ts)) return '';
+  return new Date(ts).toLocaleString(INTL_LOCALE[locale], { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 const styles = css`
   .wrap { max-width: 820px; margin: 0 auto; padding: 28px 24px 64px; }
-  .crumbs { font-size: 13px; color: var(--spec-font-color-3); margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
-  :global(.crumbs a) { color: var(--spec-font-color-3); }
-  :global(.crumbs a:hover) { color: var(--skin-primary-color); }
   .meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
   .imp { font-weight: 700; padding: 3px 9px; border-radius: 5px; }
   .src { font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
   .time { color: var(--spec-font-color-3); }
   h1.title { font-size: 32px; font-weight: 800; line-height: 1.3; color: var(--spec-font-color-1); margin-bottom: 20px; }
   .hero-img { width: 100%; max-height: 440px; object-fit: cover; border-radius: 12px; display: block; margin-bottom: 24px; background: var(--spec-background-color-3); }
-  .hero-fallback { width: 100%; height: 240px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: flex-end; padding: 18px; }
-  .hero-fallback span { font-size: 16px; font-weight: 700; text-transform: uppercase; opacity: 0.5; }
+  .hero-fallback { width: 100%; height: 240px; border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
   .body { font-size: 16px; line-height: 1.85; color: var(--spec-font-color-1); }
   .body p { margin-bottom: 18px; }
   .body :global(h2) { font-size: 22px; font-weight: 800; line-height: 1.4; margin: 30px 0 14px; color: var(--spec-font-color-1); }
@@ -108,11 +105,16 @@ const styles = css`
 `;
 
 export default function ArticleDetail({ item, related, prices = {} }: { item: NewsItem; related: NewsItem[]; prices?: Record<string, CoinPrice> }) {
+  const locale = useLocale();
+  const isEn = locale === 'en';
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));
   const imp = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
   const sColor = sourceColor(item.source);
-  const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
-  const catLabel = CATEGORY_LABELS[item.category] ?? item.category;
+  const catLabel = categoryFullLabel(item.category, locale);
+  // Per-locale content: EN reads the *_en rewrite (falls back to the original
+  // source title when not yet translated); ZH reads the zh rewrite.
+  const displayTitle = isEn ? (item.article_title_en || item.title) : (item.article_title || item.title);
+  const bodyMd = isEn ? item.article_md_en : item.article_md;
   const paragraphs = (item.fulltext || item.content || '')
     .split(/\n+/)
     .map((p) => p.trim())
@@ -130,45 +132,53 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
     .filter((k) => k && !tradeBases.has(k.toUpperCase()))
     .slice(0, 8);
 
+  // Breadcrumb = 賽道 → 幣對 → 新聞 (no generic Home). The coin level is added
+  // only when the article is tagged to a tradeable coin, and links to its hub.
+  const primaryBase = tradePairs[0]?.base?.toUpperCase() || '';
+
   return (
     <article className="wrap">
-      <nav className="crumbs">
-        <Link href="/news">首頁</Link><span>/</span>
-        <Link href={`/news/${item.category}`}>{catLabel}</Link><span>/</span>
-        <span>{(item.article_title || item.title).slice(0, 24)}…</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { name: catLabel, href: `/${locale}/news/${item.category}` },
+          ...(primaryBase ? [{ name: primaryBase, href: coinPath(primaryBase, locale) }] : []),
+          { name: displayTitle },
+        ]}
+      />
 
       <div className="meta">
         {imp && <span className="imp" style={{ color: imp.color, background: imp.bg }}>{imp.label}</span>}
         <span className="src" style={{ color: sColor }}>{item.source}</span>
-        <time className="time">{fmtDate(item.published_at || item.fetched_at)}</time>
+        <time className="time">{fmtDate(item.published_at || item.fetched_at, locale)}</time>
       </div>
 
-      <h1 className="title">{item.article_title || item.title}</h1>
+      <h1 className="title">{displayTitle}</h1>
 
       {imgOk && item.image_url ? (
         <img className="hero-img" src={item.image_url} alt={item.title} referrerPolicy="no-referrer" onError={() => setImgOk(false)} />
       ) : (
-        <div className="hero-fallback" style={{ background: bg }}><span style={{ color: sColor }}>{item.source}</span></div>
+        <div className="hero-fallback"><CoverFallback item={item} variant="article" /></div>
       )}
 
-      {item.article_md ? (
+      {bodyMd ? (
         <>
           <div className="ai-note">
             <span>✨</span>
-            <span><b>AI 編譯整理</b> · 重點摘要與結構化重寫，原文出處見文末</span>
+            <span><b>{t(locale, 'article.aiNote')}</b> · {t(locale, 'article.aiNoteDesc')}</span>
           </div>
           <div className="body">
-            <MarkdownArticle md={item.article_md} />
+            <MarkdownArticle md={bodyMd} />
             <div className="src-cite">
-              原文出處：<span className="src" style={{ color: sColor }}>{item.source}</span>
-              {item.url && <> · <a href={item.url} target="_blank" rel="noopener noreferrer nofollow">查看原始報導 ↗</a></>}
+              {t(locale, 'article.aiNoteDesc')} · <span className="src" style={{ color: sColor }}>{item.source}</span>
+              {item.url && <> · <a href={item.url} target="_blank" rel="noopener noreferrer nofollow">{t(locale, 'article.readOriginal')}</a></>}
             </div>
           </div>
         </>
       ) : (
         <div className="body">
-          {paragraphs.length ? paragraphs.map((p, i) => <p key={i}>{p}</p>) : <p>{item.title}</p>}
+          {isEn && <div className="ai-note"><span>🌐</span><span>{t(locale, 'article.translating')}</span></div>}
+          {isEn && item.summary && <p>{item.summary}</p>}
+          {paragraphs.length ? paragraphs.map((p, i) => <p key={i}>{p}</p>) : <p>{displayTitle}</p>}
         </div>
       )}
 
@@ -178,21 +188,21 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
 
       {tradePairs.length > 0 && (
         <div className="trade">
-          <div className="trade-h">💱 本文相關幣種 — 在 BYDFi 交易</div>
-          <div className="trade-sub">AI 從內文辨識、並比對 BYDFi 支援的現貨幣對，點擊直接前往交易</div>
+          <div className="trade-h">{t(locale, 'article.tradeHeader')}</div>
+          <div className="trade-sub">{t(locale, 'article.tradeSub')}</div>
           <div className="trade-pairs">
-            {tradePairs.map((t) => {
-              const chg = prices[t.base.toUpperCase()]?.pct24h;
+            {tradePairs.map((tp) => {
+              const chg = prices[tp.base.toUpperCase()]?.pct24h;
               return (
-                <span key={t.pair} className="trade-chip">
-                  <Link href={coinPath(t.base)} className="chip-coin" title={`${t.base} 相關新聞`}>
-                    <span className="chip-base">{t.base}</span>
-                    <span className="chip-quote">/{t.quote}</span>
+                <span key={tp.pair} className="trade-chip">
+                  <Link href={coinPath(tp.base, locale)} className="chip-coin" title={t(locale, 'card.coinTitle', { c: tp.base })}>
+                    <span className="chip-base">{tp.base}</span>
+                    <span className="chip-quote">/{tp.quote}</span>
                     {chg != null && (
                       <span className={`chip-chg ${chg >= 0 ? 'up' : 'down'}`}>{fmtPct(chg)}</span>
                     )}
                   </Link>
-                  <a className="chip-go" href={bydfiSpotUrl(t.pair)} target="_blank" rel="noopener noreferrer">交易 →</a>
+                  <a className="chip-go" href={bydfiSpotUrl(tp.pair)} target="_blank" rel="noopener noreferrer">{t(locale, 'article.tradeGo')}</a>
                 </span>
               );
             })}
@@ -201,19 +211,19 @@ export default function ArticleDetail({ item, related, prices = {} }: { item: Ne
       )}
 
       <div className="origin">
-        <div className="origin-note">本文重點由 BYDFi Crypto News 整理彙編，完整內容請見原始來源 <strong>{item.source}</strong>。</div>
-        <a className="origin-btn" href={item.url} target="_blank" rel="noopener noreferrer">閱讀原文 ↗</a>
+        <div className="origin-note">{t(locale, 'article.originNote', { source: item.source })}</div>
+        <a className="origin-btn" href={item.url} target="_blank" rel="noopener noreferrer">{t(locale, 'article.readOriginal')}</a>
       </div>
 
       <a className="cta" href={SIGNUP_URL} target="_blank" rel="noopener noreferrer">
-        <div className="cta-t">在 BYDFi 交易 400+ 幣種</div>
-        <div className="cta-s">現貨、合約、跟單一站搞定 — 註冊即領 $5 體驗金</div>
-        <span className="cta-b">免費註冊 →</span>
+        <div className="cta-t">{t(locale, 'article.ctaTitle')}</div>
+        <div className="cta-s">{t(locale, 'article.ctaSub')}</div>
+        <span className="cta-b">{t(locale, 'article.ctaBtn')}</span>
       </a>
 
       {related.length > 0 && (
         <>
-          <h2 className="related-h">相關新聞</h2>
+          <h2 className="related-h">{t(locale, 'article.related')}</h2>
           <div className="related-grid">
             {related.slice(0, 3).map((r) => <NewsCard key={r.id} item={r} />)}
           </div>

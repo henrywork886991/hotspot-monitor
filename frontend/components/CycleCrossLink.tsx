@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import css from 'styled-jsx/css';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 
 // Internal link between the two flagship cycle tools (抄底 ↔ 逃頂). Keeps neither
 // page orphaned and passes link equity both ways — 守則「內部連結完整」.
@@ -32,6 +34,7 @@ const styles = css`
 `;
 
 export default function CycleCrossLink({ href, emoji, title, value, label, color, blurb }: Props) {
+  const locale = useLocale();
   return (
     <Link href={href} className="x">
       <span className="badge">{emoji}</span>
@@ -40,7 +43,7 @@ export default function CycleCrossLink({ href, emoji, title, value, label, color
         <div className="val" style={{ color }}>目前 {value} · {label}</div>
         <div className="blurb">{blurb}</div>
       </span>
-      <span className="go">查看 →</span>
+      <span className="go">{t(locale, 'cross.view')}</span>
       <style jsx>{styles}</style>
     </Link>
   );

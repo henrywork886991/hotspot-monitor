@@ -1,16 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { CoinPrice } from '@/lib/market-extras';
 import { fmtUsd, fmtPct } from '@/lib/format';
 import NewsCard from './NewsCard';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 import css from 'styled-jsx/css';
 
 const styles = css`
   .wrap { max-width: var(--const-max-page-width); margin: 0 auto; padding: 28px 32px 56px; }
-  .crumbs { font-size: 13px; color: var(--spec-font-color-3); margin-bottom: 18px; }
-  :global(.crumbs a:hover) { color: var(--skin-primary-color); }
   .hero {
     display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
     padding: 24px 26px; margin-bottom: 24px; border-radius: 14px;
@@ -72,18 +71,17 @@ interface Props {
 }
 
 export default function CoinHub({ base, name, count, tradeUrl, tradePair, items, intro, price, faqs = [] }: Props) {
+  const locale = useLocale();
   const quote = tradePair.split('_')[1] || 'USDT';
   const up = (price?.pct24h ?? 0) >= 0;
   return (
     <div className="wrap">
-      <nav className="crumbs"><Link href="/news">首頁</Link> / {name} ({base})</nav>
-
       <section className="hero">
         <div className="id">
           <span className="badge">{base.slice(0, 4)}</span>
           <div>
-            <h1 className="name">{name} 最新新聞與分析</h1>
-            <div className="ticker">{base} · 共 {count} 篇相關報導（最近72小時）</div>
+            <h1 className="name">{t(locale, 'coin.title', { name })}</h1>
+            <div className="ticker">{t(locale, 'coin.subtitle', { base, count })}</div>
             {price && (
               <div className="price-row">
                 <span className="price-now">{fmtUsd(price.price)}</span>
@@ -95,7 +93,7 @@ export default function CoinHub({ base, name, count, tradeUrl, tradePair, items,
           </div>
         </div>
         <a className="trade-cta" href={tradeUrl} target="_blank" rel="noopener noreferrer">
-          在 BYDFi 交易 {base}/{quote} →
+          {t(locale, 'coin.tradeBtn', { pair: `${base}/${quote}` })}
         </a>
       </section>
 
@@ -107,7 +105,7 @@ export default function CoinHub({ base, name, count, tradeUrl, tradePair, items,
 
       {faqs.length > 0 && (
         <section className="faq">
-          <h2 className="faq-h">關於 {name}（{base}）的常見問題</h2>
+          <h2 className="faq-h">{t(locale, 'coin.faqHeader', { name, base })}</h2>
           {faqs.map((f, i) => (
             <details key={i} className="faq-item" open={i === 0}>
               <summary>{f.q}</summary>

@@ -4,8 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { relTime } from '@/lib/format';
-import { IMPORTANCE_CONFIG, CATEGORY_BG, sourceColor } from '@/lib/news-style';
+import { IMPORTANCE_CONFIG, sourceColor } from '@/lib/news-style';
 import { articlePath, coinPath } from '@/lib/site';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import CoverFallback from '@/components/CoverFallback';
 import css from 'styled-jsx/css';
 
 const styles = css`
@@ -42,21 +45,6 @@ const styles = css`
     object-fit: cover;
     display: block;
     background: var(--spec-background-color-4);
-  }
-  .card-img-fallback {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: flex-end;
-    justify-content: flex-start;
-    padding: 12px 14px;
-  }
-  .fallback-source {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    opacity: 0.5;
   }
   .importance-badge {
     position: absolute;
@@ -162,10 +150,13 @@ function articleLead(md: string | null): string {
 }
 
 export default function NewsCard({ item }: { item: NewsItem }) {
+  const locale = useLocale();
+  const isEn = locale === 'en';
   const importance = item.importance ? IMPORTANCE_CONFIG[item.importance] : null;
-  const displayTitle = item.article_title || item.title;
-  const displayText = articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 160) || '';
-  const bg = CATEGORY_BG[item.category] ?? CATEGORY_BG.all;
+  const displayTitle = isEn ? (item.article_title_en || item.title) : (item.article_title || item.title);
+  const displayText = isEn
+    ? (articleLead(item.article_md_en) || item.summary || item.content?.slice(0, 160) || '')
+    : (articleLead(item.article_md) || item.summary_zh || item.summary || item.content?.slice(0, 160) || '');
   const sColor = sourceColor(item.source);
   const [imgOk, setImgOk] = useState(Boolean(item.image_url));
   const coins = (item.symbols || '')
@@ -183,7 +174,7 @@ export default function NewsCard({ item }: { item: NewsItem }) {
 
   return (
     <div className="news-card">
-      <Link href={articlePath(item)} className="card-link">
+      <Link href={articlePath(item, locale)} className="card-link">
         <div className="card-img-wrap">
           {imgOk && item.image_url ? (
             <img
@@ -195,11 +186,7 @@ export default function NewsCard({ item }: { item: NewsItem }) {
               onError={() => setImgOk(false)}
             />
           ) : (
-            <div className="card-img-fallback" style={{ background: bg }}>
-              <span className="fallback-source" style={{ color: sColor }}>
-                {item.source}
-              </span>
-            </div>
+            <CoverFallback item={item} variant="card" />
           )}
           {importance && (
             <span
@@ -214,7 +201,7 @@ export default function NewsCard({ item }: { item: NewsItem }) {
         <div className="card-body">
           <div className="card-meta">
             <span className="source-tag" style={{ color: sColor }}>{item.source}</span>
-            <span className="card-date">{relTime(item.published_at || item.fetched_at)}</span>
+            <span className="card-date">{relTime(item.published_at || item.fetched_at, locale)}</span>
           </div>
           <h3 className="card-title">{displayTitle}</h3>
           {displayText && <p className="card-summary">{displayText}</p>}
@@ -229,7 +216,7 @@ export default function NewsCard({ item }: { item: NewsItem }) {
       {coins.length > 0 && (
         <div className="coin-row">
           {coins.map((c) => (
-            <Link key={c} href={coinPath(c)} className="coin-badge" title={`${c} 相關新聞與交易`}>{c}</Link>
+            <Link key={c} href={coinPath(c, locale)} className="coin-badge" title={t(locale, 'card.coinTitle', { c })}>{c}</Link>
           ))}
         </div>
       )}

@@ -2,7 +2,10 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getNewsById, getRelated, getSitemapEntries } from '@/lib/db';
 import { getCoinPrices } from '@/lib/market-extras';
-import { SITE_URL, SITE_NAME, articlePath, idFromSlug, categoryLabel, slugify, toIso } from '@/lib/site';
+import { SITE_URL, SITE_NAME, articlePath, idFromSlug, slugify, toIso } from '@/lib/site';
+import { LOCALES, isLocale, HTML_LANG, type Locale } from '@/lib/i18n/config';
+import { altLanguages } from '@/lib/i18n/seo';
+import type { NewsItem } from '@/types';
 import ArticleDetail from '@/components/ArticleDetail';
 
 // ISR: article content is essentially immutable; the only moving part is the
@@ -12,48 +15,54 @@ export const revalidate = 1800;
 // Prerender the most recent articles into the ISR cache; older/long-tail URLs
 // render on-demand and are then cached (dynamicParams defaults to true).
 export function generateStaticParams() {
-  return getSitemapEntries(400).map((e) => ({
+  const arts = getSitemapEntries(400).map((e) => ({
     category: e.category,
     slug: `${slugify(e.title)}-${e.id}`,
   }));
+  return LOCALES.flatMap((locale) => arts.map((a) => ({ locale, ...a })));
 }
 
 interface Props {
-  params: Promise<{ category: string; slug: string }>;
+  params: Promise<{ locale: string; category: string; slug: string }>;
 }
 
-function pickDescription(item: { article_md?: string | null; summary_zh?: string | null; summary: string | null; content: string | null }): string {
+function pickDescription(item: NewsItem, isEn: boolean): string {
   // Prefer the rewritten article's Answer-Box lead so the meta description matches
-  // the unified-language body; fall back to the AI summary, then raw content.
+  // the body; fall back to the AI summary, then raw content (per locale).
+  const md = isEn ? item.article_md_en : item.article_md;
   let lead = '';
-  if (item.article_md) {
-    lead = item.article_md
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
+  if (md) {
+    lead = md.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#') && !l.startsWith('-')) || '';
     lead = lead.replace(/\*\*/g, '');
   }
-  const text = lead || item.summary_zh || item.summary || item.content || '';
+  const text = lead || (isEn ? item.summary : (item.summary_zh || item.summary)) || item.content || '';
   return text.replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const item = getNewsById(idFromSlug(slug));
-  if (!item) return { title: '找不到文章 — BYDFi Crypto News' };
+function pathNoLocale(item: NewsItem, locale: Locale): string {
+  return articlePath(item, locale).split('/').slice(2).join('/').replace(/^/, '/');
+}
 
-  const desc = pickDescription(item);
-  const url = SITE_URL + articlePath(item);
-  const displayTitle = item.article_title || item.title;
-  // Cover image if we have one; otherwise the branded default OG card so every
-  // article still shares with an image (most skip-sources have no scrapable cover).
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale: loc, slug } = await params;
+  const locale = isLocale(loc) ? loc : 'zh';
+  const isEn = locale === 'en';
+  const item = getNewsById(idFromSlug(slug));
+  if (!item) return { title: isEn ? 'Article not found — BYDFi Crypto News' : '找不到文章 — BYDFi Crypto News' };
+
+  const desc = pickDescription(item, isEn);
+  const displayTitle = isEn ? (item.article_title_en || item.title) : (item.article_title || item.title);
   const ogImage = item.image_url || `${SITE_URL}/opengraph-image`;
+  // EN pages without a translated body are thin/duplicate — keep them out of the index.
+  const untranslated = isEn && !item.article_md_en;
   return {
     title: `${displayTitle} — BYDFi Crypto News`,
     description: desc,
-    alternates: { canonical: url },
+    alternates: altLanguages(pathNoLocale(item, locale), locale),
+    robots: untranslated ? { index: false, follow: true } : undefined,
     openGraph: {
-      type: 'article', title: displayTitle, description: desc, url, siteName: SITE_NAME,
+      type: 'article', title: displayTitle, description: desc,
+      url: `${SITE_URL}${articlePath(item, locale)}`, siteName: SITE_NAME,
       images: [{ url: ogImage }],
       publishedTime: toIso(item.published_at) || undefined,
     },
@@ -66,13 +75,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ArticlePage({ params }: Props) {
-  const { category, slug } = await params;
+  const { locale: loc, slug } = await params;
+  const locale = isLocale(loc) ? loc : 'zh';
+  const isEn = locale === 'en';
   const item = getNewsById(idFromSlug(slug));
   if (!item || item.category === 'markets') notFound();
 
   const related = getRelated(item.category, item.id, 6);
-  const desc = pickDescription(item);
-  const url = SITE_URL + articlePath(item);
+  const desc = pickDescription(item, isEn);
+  const url = `${SITE_URL}${articlePath(item, locale)}`;
+  const displayTitle = isEn ? (item.article_title_en || item.title) : (item.article_title || item.title);
   const bases = (item.symbols || '').split(',').map((p) => p.split('_')[0].trim()).filter(Boolean);
   const prices = getCoinPrices(bases);
 
@@ -81,8 +93,9 @@ export default async function ArticlePage({ params }: Props) {
     '@graph': [
       {
         '@type': 'NewsArticle',
-        headline: (item.article_title || item.title).slice(0, 110),
+        headline: displayTitle.slice(0, 110),
         description: desc,
+        inLanguage: HTML_LANG[locale],
         image: item.image_url ? [item.image_url] : undefined,
         datePublished: toIso(item.published_at) || toIso(item.fetched_at),
         dateModified: toIso(item.fetched_at),
@@ -91,14 +104,6 @@ export default async function ArticlePage({ params }: Props) {
         mainEntityOfPage: { '@type': 'WebPage', '@id': url },
         keywords: item.keywords || undefined,
         isBasedOn: item.url || undefined,
-      },
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'News', item: `${SITE_URL}/news` },
-          { '@type': 'ListItem', position: 2, name: categoryLabel(item.category), item: `${SITE_URL}/news/${category}` },
-          { '@type': 'ListItem', position: 3, name: item.title.slice(0, 60) },
-        ],
       },
     ],
   };

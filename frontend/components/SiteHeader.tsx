@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import css from 'styled-jsx/css';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 
 /* Faithful replica of the bydfi.com/en top navigation.
    Logo SVG extracted verbatim from the live BYDFi site (white wordmark + yellow `currentColor` accents).
@@ -180,7 +182,8 @@ const styles = css`
 export default function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const onNews = pathname.startsWith('/news');
+  const locale = useLocale();
+  const onNews = pathname.startsWith(`/${locale}/news`);
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -190,10 +193,11 @@ export default function SiteHeader() {
     const q = query.trim();
     if (!q) return;
     setSearchOpen(false);
-    router.push(`/news?q=${encodeURIComponent(q)}`);
+    router.push(`/${locale}/news?q=${encodeURIComponent(q)}`);
   }
 
   function navItem(item: NavItem, base: string, onClick?: () => void) {
+    const href = item.external ? item.href : `/${locale}${item.href}`;
     const isActive = item.href === '/news' && onNews;
     const className = [base, item.gold ? 'gold' : '', isActive ? 'active' : ''].filter(Boolean).join(' ');
     const inner = (
@@ -204,9 +208,9 @@ export default function SiteHeader() {
       </>
     );
     return item.external ? (
-      <a key={item.label} href={item.href} target="_blank" rel="noopener noreferrer" className={className} onClick={onClick}>{inner}</a>
+      <a key={item.label} href={href} target="_blank" rel="noopener noreferrer" className={className} onClick={onClick}>{inner}</a>
     ) : (
-      <Link key={item.label} href={item.href} className={className} onClick={onClick}>{inner}</Link>
+      <Link key={item.label} href={href} className={className} onClick={onClick}>{inner}</Link>
     );
   }
 
@@ -214,7 +218,7 @@ export default function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <div className="brand">
-          <Link href="/news" className="brand-logo"><BydfiLogo /></Link>
+          <Link href={`/${locale}/news`} className="brand-logo"><BydfiLogo /></Link>
           <nav className="product-tabs">
             <a href="https://www.bydfi.com/en" target="_blank" rel="noopener noreferrer" className="product-tab">Exchange</a>
             <a href="https://www.bydfi.com/en/moonx/markets/trending" target="_blank" rel="noopener noreferrer" className="product-tab">
@@ -246,7 +250,7 @@ export default function SiteHeader() {
         <form className="search-bar" onSubmit={submitSearch}>
           <input
             type="search"
-            placeholder="搜尋新聞、幣種、關鍵字…（Enter 搜尋）"
+            placeholder={t(locale, 'header.search')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus

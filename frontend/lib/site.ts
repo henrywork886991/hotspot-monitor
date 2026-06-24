@@ -1,3 +1,5 @@
+import { type Locale, DEFAULT_LOCALE } from './i18n/config';
+
 /* Canonical base URL — override with NEXT_PUBLIC_SITE_URL in production. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://news.bydfi.com').replace(/\/$/, '');
 export const SITE_NAME = 'BYDFi Crypto News';
@@ -12,12 +14,12 @@ export function slugify(title: string): string {
     .slice(0, 60) || 'article';
 }
 
-/* Keyword-rich article URL: /news/<category>/<title-slug>-<id>.
+/* Keyword-rich article URL: /<locale>/news/<category>/<title-slug>-<id>.
    The trailing id keeps lookups reliable; the slug is the SEO signal. */
-export function articlePath(item: { category: string | null; id: number; title?: string | null }): string {
+export function articlePath(item: { category: string | null; id: number; title?: string | null }, locale: Locale = DEFAULT_LOCALE): string {
   const cat = item.category ?? 'crypto';
   const seg = item.title ? `${slugify(item.title)}-${item.id}` : String(item.id);
-  return `/news/${cat}/${seg}`;
+  return `/${locale}/news/${cat}/${seg}`;
 }
 
 /** Parse the numeric id back out of a "slug-123" (or bare "123") path segment. */
@@ -26,17 +28,43 @@ export function idFromSlug(seg: string): number {
   return Number(m ? m[1] : seg);
 }
 
-export const CATEGORY_LABELS: Record<string, string> = {
-  all: '全部', markets: '行情', crypto: 'Crypto', defi: 'DeFi', web3: 'Web3',
-  cn_crypto: '中文幣圈', asia: '亞洲', stocks: '美股', macro: '宏觀',
-  regulation: '監管', tech: '科技',
+/* Short labels for the compact tab bar, per locale. */
+export const CATEGORY_LABELS: Record<Locale, Record<string, string>> = {
+  zh: {
+    all: '全部', markets: '行情', crypto: 'Crypto', defi: 'DeFi', web3: 'Web3',
+    cn_crypto: '中文幣圈', asia: '亞洲', stocks: '美股', macro: '宏觀',
+    regulation: '監管', tech: '科技', altcoin: '山寨幣',
+  },
+  en: {
+    all: 'All', markets: 'Markets', crypto: 'Crypto', defi: 'DeFi', web3: 'Web3',
+    cn_crypto: 'CN Crypto', asia: 'Asia', stocks: 'Stocks', macro: 'Macro',
+    regulation: 'Regulation', tech: 'Tech', altcoin: 'Altcoin',
+  },
 };
-export function categoryLabel(c: string): string {
-  return CATEGORY_LABELS[c] ?? c;
+export function categoryLabel(c: string, locale: Locale = DEFAULT_LOCALE): string {
+  return CATEGORY_LABELS[locale][c] ?? CATEGORY_LABELS.zh[c] ?? c;
 }
 
-export function coinPath(base: string): string {
-  return `/coin/${base.toUpperCase()}`;
+/* Descriptive, SEO-friendly category labels for breadcrumbs / <title> / <h1>.
+   Longer forms read better in a breadcrumb trail and for Google. */
+export const CATEGORY_FULL_LABELS: Record<Locale, Record<string, string>> = {
+  zh: {
+    all: '全部', altcoin: '山寨幣', markets: '行情數據', crypto: '加密貨幣',
+    defi: 'DeFi 去中心化金融', web3: 'Web3 基礎設施', cn_crypto: '中文幣圈', asia: '亞洲市場',
+    stocks: '美股', macro: '宏觀經濟', regulation: '監管合規', tech: '科技 & AI',
+  },
+  en: {
+    all: 'All', altcoin: 'Altcoins', markets: 'Market Data', crypto: 'Crypto',
+    defi: 'DeFi', web3: 'Web3', cn_crypto: 'Chinese Crypto', asia: 'Asia Markets',
+    stocks: 'US Stocks', macro: 'Macro', regulation: 'Regulation', tech: 'Tech & AI',
+  },
+};
+export function categoryFullLabel(c: string, locale: Locale = DEFAULT_LOCALE): string {
+  return CATEGORY_FULL_LABELS[locale][c] ?? CATEGORY_FULL_LABELS.zh[c] ?? CATEGORY_LABELS[locale][c] ?? c;
+}
+
+export function coinPath(base: string, locale: Locale = DEFAULT_LOCALE): string {
+  return `/${locale}/coin/${base.toUpperCase()}`;
 }
 
 export function bydfiSpotUrl(pair: string): string {

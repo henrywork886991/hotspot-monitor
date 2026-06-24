@@ -1,8 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { NewsItem } from '@/types';
 import { DipIndex } from '@/lib/market-extras';
+import { categoryFullLabel } from '@/lib/site';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import { INTL_LOCALE } from '@/lib/i18n/config';
+import Breadcrumbs from './Breadcrumbs';
 import NewsCard from './NewsCard';
 import DipChart from './DipChart';
 import BacktestTool from './BacktestTool';
@@ -26,8 +30,6 @@ function parse(content: string | null): { price: string; chg: number | null } {
 
 const styles = css`
   .wrap { max-width: var(--const-max-page-width); margin: 0 auto; padding: 28px 32px 56px; }
-  .crumbs { font-size: 13px; color: var(--spec-font-color-3); margin-bottom: 18px; }
-  :global(.crumbs a:hover) { color: var(--skin-primary-color); }
 
   .hero {
     display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: center;
@@ -96,15 +98,21 @@ interface Props {
 }
 
 export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, history, sibling }: Props) {
+  const locale = useLocale();
   // GEO-citable fact: consecutive days in the 抄底 (>=60) zone.
   let streak = 0;
   for (let i = history.length - 1; i >= 0 && history[i].value >= 60; i--) streak++;
   const c = zoneColor(dip.value);
-  const updated = dip.updated ? new Date(dip.updated).toLocaleString('zh-TW', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  const updated = dip.updated ? new Date(dip.updated).toLocaleString(INTL_LOCALE[locale], { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 
   return (
     <div className="wrap">
-      <nav className="crumbs"><Link href="/news">首頁</Link> / BYDFi 抄底指數</nav>
+      <Breadcrumbs
+        items={[
+          { name: categoryFullLabel('crypto', locale), href: `/${locale}/news/crypto` },
+          { name: t(locale, 'dip.title') },
+        ]}
+      />
 
       <section className="hero">
         <div className="gauge" style={{ ['--c' as string]: c, ['--p' as string]: dip.value }}>
@@ -115,11 +123,11 @@ export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, hi
           </div>
         </div>
         <div>
-          <h1 className="t">BYDFi 抄底指數</h1>
+          <h1 className="t">{t(locale, 'dip.title')}</h1>
           <p className="snap">{snapshot}</p>
           <div className="updated">
-            更新時間：{updated}（每 2 小時自動計算）
-            {delta !== null && <> · 較昨日 <span style={{ color: delta >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}</span></>}
+            {t(locale, 'dip.updated', { time: updated })}
+            {delta !== null && <> · {t(locale, 'dip.vsYesterday')} <span style={{ color: delta >= 0 ? 'var(--color-green)' : 'var(--color-red)' }}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}</span></>}
           </div>
         </div>
       </section>
@@ -128,19 +136,17 @@ export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, hi
 
       {history.length >= 2 && (
         <div className="panel">
-          <h2>指數走勢（近 {history.length} 天）</h2>
+          <h2>{t(locale, 'dip.chartHeader', { n: history.length })}</h2>
           <div className="sub">
-            {streak > 0
-              ? `已連續 ${streak} 天處於抄底區間（≥60）`
-              : '近期指數區間變化'}
+            {streak > 0 ? t(locale, 'dip.streak', { n: streak }) : t(locale, 'dip.recentRange')}
           </div>
           <DipChart history={history} />
         </div>
       )}
 
       <div className="panel">
-        <h2>指數構成（透明計分）</h2>
-        <div className="sub">{dip.components.length} 項訊號加權合成（鏈上估值 · 技術 · 情緒 · 新聞），分數越高代表越偏向「恐懼／超賣／抄底」</div>
+        <h2>{t(locale, 'dip.componentsHeader')}</h2>
+        <div className="sub">{t(locale, 'dip.componentsSub', { n: dip.components.length })}</div>
         {dip.components.map((co) => (
           <div key={co.name} className="comp">
             <span className="comp-name">{co.name}</span>
@@ -152,15 +158,15 @@ export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, hi
       </div>
 
       <div className="panel">
-        <h2>多賺多少？</h2>
-        <div className="sub">回溯歷史 BTC 行情：如果當時按抄底訊號進場，你今天會多賺多少。</div>
+        <h2>{t(locale, 'dip.backtestTitle')}</h2>
+        <div className="sub">{t(locale, 'dip.backtestSub')}</div>
         <BacktestTool mode="dip" />
       </div>
 
       {losers.length > 0 && (
         <div className="panel">
-          <h2>🩸 抄底幣種榜（24h 跌幅最深）</h2>
-          <div className="sub">BYDFi 可交易幣種 · 點擊直接前往現貨交易</div>
+          <h2>{t(locale, 'dip.losersHeader')}</h2>
+          <div className="sub">{t(locale, 'dip.losersSub')}</div>
           <div className="losers">
             {losers.map((it, i) => {
               const { price, chg } = parse(it.content);
@@ -179,8 +185,8 @@ export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, hi
 
       {dipNews.length > 0 && (
         <div className="panel">
-          <h2>📰 抄底情報</h2>
-          <div className="sub">市場回調、增持、超賣相關新聞</div>
+          <h2>{t(locale, 'dip.newsHeader')}</h2>
+          <div className="sub">{t(locale, 'dip.newsSub')}</div>
           <div className="news-grid">
             {dipNews.slice(0, 8).map((it) => <NewsCard key={it.id} item={it} />)}
           </div>
@@ -188,19 +194,9 @@ export default function DipIndexView({ dip, snapshot, losers, dipNews, delta, hi
       )}
 
       <div className="panel">
-        <h2>方法論</h2>
-        <p className="method">
-          BYDFi 抄底指數是 BYDFi News 自有的複合訊號，把<b>多方數據</b>整合為單一 0–100 指標，涵蓋四個維度：
-          <b>鏈上估值</b>（MVRV Z-Score、NUPL 淨未實現損益）、
-          <b>技術面</b>（BTC 距歷史高點回調、200 日均線偏離、14 日 RSI 超賣）、
-          <b>市場情緒</b>（恐懼貪婪指數、永續資金費率）、
-          以及我們獨家的<b>新聞恐慌度</b>（近 24 小時崩跌類新聞佔比）。
-          各項標準化後加權合成，分數越高代表市場越偏向恐懼/超賣，歷史上常對應較佳的累積區間。
-          資料來源：bitcoin-data.com（鏈上）、Alternative.me、CoinGecko、Binance 與 BYDFi News 新聞流。
-        </p>
-        <p className="disclaimer">
-          ⚠️ 本指數僅供市場參考與教育用途，不構成投資建議。加密貨幣價格波動劇烈，請自行研究並評估風險。
-        </p>
+        <h2>{t(locale, 'dip.methodology')}</h2>
+        <p className="method">{t(locale, 'dip.methodologyProse')}</p>
+        <p className="disclaimer">{t(locale, 'dip.disclaimer')}</p>
       </div>
 
       <style jsx>{styles}</style>

@@ -2,6 +2,9 @@
 
 import { FearGreed as FG } from '@/lib/market-extras';
 import css from 'styled-jsx/css';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
+import type { Locale } from '@/lib/i18n/config';
 
 /* Crypto Fear & Greed Index — contrarian sentiment hook.
    Extreme Fear ≈ 抄底區; we surface it to drive attention when the market dips. */
@@ -13,12 +16,12 @@ function color(v: number): string {
   if (v < 75) return '#9acd32';
   return 'var(--color-green)';
 }
-function hint(v: number): string {
-  if (v < 25) return '市場極度恐懼 — 歷史上的抄底區間';
-  if (v < 45) return '市場偏向恐懼 — 留意逢低布局機會';
-  if (v <= 55) return '市場情緒中性';
-  if (v < 75) return '市場偏向貪婪 — 注意追高風險';
-  return '市場極度貪婪 — 小心追高';
+function hint(v: number, locale: Locale): string {
+  if (v < 25) return t(locale, 'fg.extremeFear');
+  if (v < 45) return t(locale, 'fg.fear');
+  if (v <= 55) return t(locale, 'fg.neutral');
+  if (v < 75) return t(locale, 'fg.greed');
+  return t(locale, 'fg.extremeGreed');
 }
 
 const styles = css`
@@ -47,6 +50,7 @@ const styles = css`
 `;
 
 export default function FearGreed({ data }: { data: FG }) {
+  const locale = useLocale();
   const c = color(data.value);
   const up = data.delta >= 0;
   return (
@@ -56,14 +60,14 @@ export default function FearGreed({ data }: { data: FG }) {
           <span className="v">{data.value}</span>
         </div>
         <div className="fg-meta">
-          <div className="fg-label" style={{ color: c }}>{data.label_zh}</div>
-          <div className="fg-sub">恐懼貪婪指數 · {data.classification}</div>
+          <div className="fg-label" style={{ color: c }}>{locale === 'en' ? data.classification : data.label_zh}</div>
+          <div className="fg-sub">{t(locale, 'fg.label')} · {data.classification}</div>
           <div className="fg-delta" style={{ color: up ? 'var(--color-green)' : 'var(--color-red)' }}>
-            {up ? '▲' : '▼'} {Math.abs(data.delta)} vs 昨日
+            {up ? '▲' : '▼'} {Math.abs(data.delta)} {t(locale, 'fg.vsYesterday')}
           </div>
         </div>
       </div>
-      <div className="fg-hint">{hint(data.value)}</div>
+      <div className="fg-hint">{hint(data.value, locale)}</div>
       <style jsx>{styles}</style>
     </div>
   );

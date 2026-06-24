@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { NewsItem } from '@/types';
 import { FearGreed as FG } from '@/lib/market-extras';
 import FearGreed from './FearGreed';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 import css from 'styled-jsx/css';
 
 /* Markets view — price data for BYDFi-tradeable coins. Every row links to the
@@ -16,10 +18,10 @@ interface Group {
   items: NewsItem[];
 }
 
-const SECTIONS: { source: string; title: string; sub: string }[] = [
-  { source: 'cg_losers',   title: '🩸 今日抄底榜',  sub: '24h 跌幅最深' },
-  { source: 'cg_trending', title: '🔥 熱門幣種',    sub: 'Trending' },
-  { source: 'cg_gainers',  title: '🚀 今日領漲榜',  sub: '24h 漲幅最高' },
+const SECTIONS: { source: string; titleKey: string; subKey: string }[] = [
+  { source: 'cg_losers',   titleKey: 'markets.dip',     subKey: 'markets.dipSub' },
+  { source: 'cg_trending', titleKey: 'markets.hot',     subKey: 'markets.hotSub' },
+  { source: 'cg_gainers',  titleKey: 'markets.gainers', subKey: 'markets.gainersSub' },
 ];
 
 /* Pull "24h: -2.34%" out of the CoinGecko content string for coloring. */
@@ -85,6 +87,7 @@ const styles = css`
 `;
 
 export default function MarketsFeed({ fearGreed }: { fearGreed?: FG | null }) {
+  const locale = useLocale();
   const [items, setItems] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,16 +100,16 @@ export default function MarketsFeed({ fearGreed }: { fearGreed?: FG | null }) {
 
   const groups: Group[] = SECTIONS.map((s) => ({
     key: s.source,
-    title: s.title,
-    sub: s.sub,
+    title: t(locale, s.titleKey),
+    sub: t(locale, s.subKey),
     items: items.filter((i) => i.source === s.source),
   }));
 
   return (
     <div className="markets-wrap">
       <div className="markets-head">
-        <div className="markets-title">行情數據</div>
-        <div className="markets-note">BYDFi 可交易幣種的即時行情 · 點任一幣種直接前往 BYDFi 現貨交易</div>
+        <div className="markets-title">{t(locale, 'markets.title')}</div>
+        <div className="markets-note">{t(locale, 'markets.subtitle')}</div>
       </div>
 
       {fearGreed && (
@@ -123,7 +126,7 @@ export default function MarketsFeed({ fearGreed }: { fearGreed?: FG | null }) {
               <span className="s">{g.sub}</span>
             </div>
             {g.items.length === 0 ? (
-              <div className="empty">{loading ? '載入中…' : '暫無數據'}</div>
+              <div className="empty">{loading ? t(locale, 'markets.loading') : t(locale, 'markets.empty')}</div>
             ) : (
               g.items.map((item, idx) => {
                 const chg = parse24h(item.content);

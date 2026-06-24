@@ -6,6 +6,8 @@ import { relTime, clockTime } from '@/lib/format';
 import { IMPORTANCE_CONFIG, sourceColor } from '@/lib/news-style';
 import { articlePath, coinPath } from '@/lib/site';
 import { DipIndex, TopIndex } from '@/lib/market-extras';
+import { useLocale } from './LocaleProvider';
+import { t } from '@/lib/i18n/messages';
 import css from 'styled-jsx/css';
 
 export interface HotCoin { base: string; pair: string; count: number }
@@ -29,10 +31,10 @@ const SIGNUP_URL = 'https://www.bydfi.com/en/register';
 
 /* Activities (≈ BYDFi 'Activities' / cmsBannerActivities pool component).
    Static promo banners for now; trivially swappable for a CMS feed on port. */
-const ACTIVITIES: { icon: string; title: string; tag: string; tagColor: string; href: string }[] = [
-  { icon: '🎉', title: '新用戶任務中心 — 完成任務領 $5,050 獎勵', tag: '新人福利', tagColor: '#0ecb81', href: 'https://www.bydfi.com/en' },
-  { icon: '🏆', title: '合約交易大賽 — 瓜分 $100,000 獎池',        tag: '限時賽事', tagColor: '#f6465d', href: 'https://www.bydfi.com/en' },
-  { icon: '💳', title: 'BYDFi Card — 加密貨幣消費最高 8% 返現',    tag: '熱門',    tagColor: '#ffd30f', href: 'https://www.bydfi.com/en' },
+const ACTIVITIES: { icon: string; key: string; tagColor: string; href: string }[] = [
+  { icon: '🎉', key: 'act1', tagColor: '#0ecb81', href: 'https://www.bydfi.com/en' },
+  { icon: '🏆', key: 'act2', tagColor: '#f6465d', href: 'https://www.bydfi.com/en' },
+  { icon: '💳', key: 'act3', tagColor: '#ffd30f', href: 'https://www.bydfi.com/en' },
 ];
 
 const styles = css`
@@ -181,6 +183,7 @@ const styles = css`
 `;
 
 export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIndex }: { items?: NewsItem[]; hotCoins?: HotCoin[]; dipIndex?: DipIndex | null; topIndex?: TopIndex | null }) {
+  const locale = useLocale();
   const trending = items
     .filter((i) => i.importance === 'urgent' || i.importance === 'high')
     .slice(0, 7);
@@ -189,37 +192,37 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
   return (
     <aside className="sidebar">
       <a className="cta" href={SIGNUP_URL} target="_blank" rel="noopener noreferrer">
-        <div className="cta-kicker">新用戶專屬</div>
-        <div className="cta-title">註冊即領 $5 體驗金</div>
-        <div className="cta-sub">在 BYDFi 交易 400+ 幣種，現貨、合約、跟單一站搞定。</div>
-        <div className="cta-btn">免費註冊 →</div>
+        <div className="cta-kicker">{t(locale, 'sidebar.signupTitle')}</div>
+        <div className="cta-title">{t(locale, 'sidebar.signupAmount')}</div>
+        <div className="cta-sub">{t(locale, 'sidebar.signupDesc')}</div>
+        <div className="cta-btn">{t(locale, 'sidebar.signupCta')}</div>
       </a>
 
       {dipIndex && (
-        <Link href="/dip-index" className="dip-card">
+        <Link href={`/${locale}/dip-index`} className="dip-card">
           <div className="dip-top">
             <div className="dip-gauge" style={{ ['--c' as string]: dipColor(dipIndex.value), ['--p' as string]: dipIndex.value }}>
               <span className="dip-v" style={{ color: dipColor(dipIndex.value) }}>{dipIndex.value}</span>
             </div>
             <div>
-              <div className="dip-name">🩸 BYDFi 抄底指數</div>
+              <div className="dip-name">🩸 {t(locale, 'sidebar.dipTitle')}</div>
               <div className="dip-label" style={{ color: dipColor(dipIndex.value) }}>{dipIndex.label}</div>
-              <div className="dip-go">查看完整指數 →</div>
+              <div className="dip-go">{t(locale, 'sidebar.dipCta')}</div>
             </div>
           </div>
         </Link>
       )}
 
       {topIndex && (
-        <Link href="/top-signal" className="dip-card">
+        <Link href={`/${locale}/top-signal`} className="dip-card">
           <div className="dip-top">
             <div className="dip-gauge" style={{ ['--c' as string]: topColor(topIndex.value), ['--p' as string]: topIndex.value }}>
               <span className="dip-v" style={{ color: topColor(topIndex.value) }}>{topIndex.value}</span>
             </div>
             <div>
-              <div className="dip-name">🚀 BYDFi 逃頂指數</div>
-              <div className="dip-label" style={{ color: topColor(topIndex.value) }}>{topIndex.label} · {topIndex.triggered_count}/{topIndex.total} 觸發</div>
-              <div className="dip-go">查看頂部訊號 →</div>
+              <div className="dip-name">🚀 {t(locale, 'sidebar.topTitle')}</div>
+              <div className="dip-label" style={{ color: topColor(topIndex.value) }}>{topIndex.label} · {topIndex.triggered_count}/{topIndex.total} {t(locale, 'sidebar.triggeredSuffix')}</div>
+              <div className="dip-go">{t(locale, 'sidebar.topCta')}</div>
             </div>
           </div>
         </Link>
@@ -227,10 +230,10 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
 
       {hotCoins.length > 0 && (
         <div className="panel">
-          <div className="panel-head">🔥 熱門幣種</div>
+          <div className="panel-head">{t(locale, 'sidebar.hotCoins')}</div>
           <div className="coins">
             {hotCoins.map((c) => (
-              <Link key={c.base} href={coinPath(c.base)} className="coin-chip" title={`${c.base} 相關新聞與交易`}>
+              <Link key={c.base} href={coinPath(c.base, locale)} className="coin-chip" title={t(locale, 'card.coinTitle', { c: c.base })}>
                 <span className="coin-t">{c.base}</span>
                 <span className="coin-c">{c.count}</span>
               </Link>
@@ -240,20 +243,20 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
       )}
 
       <div className="panel">
-        <div className="panel-head">🔥 熱門排行</div>
+        <div className="panel-head">{t(locale, 'sidebar.hotRank')}</div>
         {trending.length === 0 ? (
-          <div className="empty">暫無熱門</div>
+          <div className="empty">{t(locale, 'sidebar.noHot')}</div>
         ) : (
           trending.map((it, i) => {
             const c = sourceColor(it.source);
             return (
-              <Link key={it.id} href={articlePath(it)} className="trend-row">
+              <Link key={it.id} href={articlePath(it, locale)} className="trend-row">
                 <span className={`rank${i < 3 ? ' top' : ''}`}>{i + 1}</span>
                 <div className="trend-main">
-                  <div className="trend-title">{it.article_title || it.title}</div>
+                  <div className="trend-title">{(locale === 'en' ? it.article_title_en : it.article_title) || it.title}</div>
                   <div className="trend-meta">
                     <span className="s" style={{ color: c }}>{it.source}</span>
-                    {' · '}{relTime(it.published_at || it.fetched_at)}
+                    {' · '}{relTime(it.published_at || it.fetched_at, locale)}
                   </div>
                 </div>
               </Link>
@@ -263,32 +266,32 @@ export default function NewsSidebar({ items = [], hotCoins = [], dipIndex, topIn
       </div>
 
       <div className="panel">
-        <div className="panel-head">🎁 活動專區</div>
+        <div className="panel-head">{t(locale, 'sidebar.activities')}</div>
         {ACTIVITIES.map((a) => (
-          <a key={a.title} className="act-row" href={a.href} target="_blank" rel="noopener noreferrer">
+          <a key={a.key} className="act-row" href={a.href} target="_blank" rel="noopener noreferrer">
             <span className="act-icon">{a.icon}</span>
             <div className="act-main">
-              <div className="act-title">{a.title}</div>
-              <span className="act-tag" style={{ color: a.tagColor, background: `${a.tagColor}1f` }}>{a.tag}</span>
+              <div className="act-title">{t(locale, `sidebar.${a.key}Title`)}</div>
+              <span className="act-tag" style={{ color: a.tagColor, background: `${a.tagColor}1f` }}>{t(locale, `sidebar.${a.key}Tag`)}</span>
             </div>
           </a>
         ))}
       </div>
 
       <div className="panel">
-        <div className="panel-head"><span className="live-dot" />24/7 快訊</div>
+        <div className="panel-head"><span className="live-dot" />{t(locale, 'sidebar.liveFlash')}</div>
         {live.length === 0 ? (
-          <div className="empty">暫無快訊</div>
+          <div className="empty">{t(locale, 'sidebar.noFlash')}</div>
         ) : (
           <div className="live">
             {live.map((it) => {
               const imp = it.importance ? IMPORTANCE_CONFIG[it.importance] : null;
               const dot = imp?.color ?? 'var(--spec-font-color-3)';
               return (
-                <Link key={it.id} href={articlePath(it)} className="flash">
+                <Link key={it.id} href={articlePath(it, locale)} className="flash">
                   <span className="flash-node" style={{ background: dot }} />
-                  <div className="flash-time">{clockTime(it.published_at || it.fetched_at)}</div>
-                  <div className="flash-title">{it.article_title || it.title}</div>
+                  <div className="flash-time">{clockTime(it.published_at || it.fetched_at, locale)}</div>
+                  <div className="flash-title">{(locale === 'en' ? it.article_title_en : it.article_title) || it.title}</div>
                 </Link>
               );
             })}
