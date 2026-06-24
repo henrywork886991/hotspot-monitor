@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Google 搜尋外觀稽核報告 — BYDFi Crypto News</title>
+<title>Google 搜尋外觀稽核報告 v2 — BYDFi Crypto News</title>
 <style>
   :root{
     --bg:#0b0e11; --card:#15181d; --card2:#1c2026; --line:#2a2f37;
@@ -45,75 +45,80 @@
   .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0;font-size:12.5px;color:var(--mut)}
   footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
   .verdict{background:linear-gradient(120% 120% at 0 0,rgba(255,211,15,.10),transparent 60%),var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin:20px 0}
+  .delta{background:rgba(76,141,255,.10);border:1px solid rgba(76,141,255,.3);border-radius:8px;padding:6px 10px;font-size:12.5px;color:#bcd4ff;display:inline-block;margin:2px 0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>🔍 Google 搜尋外觀稽核報告</h1>
-    <div class="sub">BYDFi Crypto News 原型 · 稽核日期 2026-06-23 · 對照 <a style="color:var(--blue)" href="https://developers.google.com/search/docs/appearance">Google Search Appearance</a> 全清單</div>
+    <h1>🔍 Google 搜尋外觀稽核報告 <span style="color:var(--pri)">v2</span></h1>
+    <div class="sub">BYDFi Crypto News 原型 · 稽核日期 2026-06-24 · 對照 <a style="color:var(--blue)" href="https://developers.google.com/search/docs/appearance?hl=zh-cn">Google Search Appearance</a> 全清單</div>
+    <div class="sub" style="margin-top:8px">本版相對 <a style="color:var(--blue)" href="#">v1 (2026-06-23)</a> 的兩大優化:<b style="color:var(--pri)">① 多語系 i18n（/zh /en + hreflang）</b> · <b style="color:var(--pri)">② AI 自產封面圖 + 發佈閘門</b> —— 兩者已重新驗證。</div>
   </header>
 
   <div class="note">
-    <b>方法與前提：</b>逐頁抓取 dev server 實際輸出的 HTML(<code>/news</code>、<code>/news/crypto</code>、<code>/news/altcoin</code>、文章頁、<code>/coin/BTC</code>、<code>/dip-index</code>、<code>/top-signal</code>、<code>robots.txt</code>、<code>sitemap.xml</code>),解析其 <code>&lt;title&gt;</code>、meta、canonical、OG/Twitter、JSON-LD 結構化資料。<b>注意：</b>Google 官方 Rich Results Test / PageSpeed 無法抓 <code>localhost</code>,故此為「原始碼／渲染 HTML 層級」稽核;Core Web Vitals 與官方驗證需部署到公開網址後再跑。
+    <b>方法與前提：</b>逐頁抓取 dev server 實際輸出的 HTML（<code>/zh/news</code>、<code>/en/news/crypto</code>、文章頁、<code>sitemap.xml</code>、<code>robots.txt</code> 等），解析 <code>&lt;title&gt;</code>、canonical、<code>hreflang</code>、OG/Twitter、JSON-LD。<b>注意：</b>官方 Rich Results Test / PageSpeed 無法抓 <code>localhost</code>，故此為「渲染 HTML 層級」稽核；Core Web Vitals 與官方驗證需部署到公開網址後再跑。
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="n green">15</div><div class="l">已實作 / 合規</div></div>
-    <div class="stat"><div class="n pri">2</div><div class="l">本次新補強</div></div>
+    <div class="stat"><div class="n green">17</div><div class="l">已實作 / 合規</div></div>
+    <div class="stat"><div class="n pri">2</div><div class="l">本版重大新增</div></div>
     <div class="stat"><div class="n blue">3</div><div class="l">待部署後驗證</div></div>
-    <div class="stat"><div class="n gray">3</div><div class="l">缺口(已知)</div></div>
+    <div class="stat"><div class="n gray">3</div><div class="l">缺口（已知）</div></div>
   </div>
 
   <div class="legend">
     <span class="badge b-ok">✓ 已就緒</span>
-    <span class="badge b-new">★ 本次新增</span>
+    <span class="badge b-new">★ 本版新增</span>
     <span class="badge b-warn">✗ 缺口</span>
     <span class="badge b-soon">◷ 部署後驗證</span>
     <span class="badge b-na">— 不適用</span>
   </div>
 
-  <h2>★ 本次補強(已套用並驗證)</h2>
+  <h2>★ 本版新增（已套用並驗證）</h2>
 
   <div class="fix">
-    <div class="tag">★ FIX 1 — 已生效</div>
-    <h3>列表頁 Canonical</h3>
-    <div class="sub" style="color:var(--mut)"><code>/news</code>、<code>/news/crypto</code>、<code>/news/altcoin</code> 原本沒有 canonical。已補自我指向的絕對 canonical,把 <code>?q=</code> 搜尋與分頁變體收斂到乾淨 URL,避免重複內容稀釋排名。</div>
-    <pre>/news        → &lt;link rel="canonical" href="https://news.bydfi.com/news"&gt;
-/news/crypto → &lt;link rel="canonical" href="https://news.bydfi.com/news/crypto"&gt;
-/news/altcoin→ &lt;link rel="canonical" href="https://news.bydfi.com/news/altcoin"&gt;</pre>
+    <div class="tag">★ NEW 1 — 已驗證</div>
+    <h3>多語系 i18n（hreflang + 在地化中繼資料）</h3>
+    <div class="sub" style="color:var(--mut)">v1 時為單語 zh-TW、無 i18n（標記為缺口）。本版已導入 <code>/zh</code> 與 <code>/en</code> 路徑分離，分類頁與文章頁皆有 <code>hreflang</code>（<code>zh-Hant</code> / <code>en</code> / <code>x-default</code>）、在地化 <code>&lt;title&gt;</code>、以及各語言自我指向的 canonical。Sitemap 也已對每個 URL 附 <code>xhtml:link</code> 雙語替代。</div>
+    <pre>/en/news/crypto  &lt;title&gt;Crypto News — Hotspot Monitor&lt;/title&gt;
+/zh/news/crypto  &lt;title&gt;加密貨幣 熱點 — Hotspot Monitor&lt;/title&gt;
+&lt;link rel="alternate" hreflang="zh-Hant" href=".../zh/news/crypto"&gt;
+&lt;link rel="alternate" hreflang="en"      href=".../en/news/crypto"&gt;
+&lt;link rel="alternate" hreflang="x-default" href=".../news/crypto"&gt;
+sitemap.xml → 2,134 URL，含 4,268 條 hreflang 替代連結</pre>
   </div>
 
   <div class="fix">
-    <div class="tag">★ FIX 2 — 已生效</div>
-    <h3>WebSite SearchAction(Sitelinks 搜尋框標記)</h3>
-    <div class="sub" style="color:var(--mut)">站內已有搜尋(<code>/news?q=</code>),但 WebSite schema 缺 <code>SearchAction</code>。已補上,讓 Google 能識別站內搜尋入口。</div>
-    <pre>"potentialAction": {
-  "@type": "SearchAction",
-  "target": { "@type": "EntryPoint",
-    "urlTemplate": "https://news.bydfi.com/news?q={search_term_string}" },
-  "query-input": "required name=search_term_string"
-}</pre>
+    <div class="tag">★ NEW 2 — 已驗證</div>
+    <h3>AI 自產封面圖 + 「發佈完整性」閘門</h3>
+    <div class="sub" style="color:var(--mut)">每篇文章現在都有封面圖（原文 og:image → AI 自產圖 → CSS 保底）。AI 圖以寫實圖庫風生成（主題×構圖×光線×鏡頭多維變化，避免千篇一律），上傳 Cloudinary 並以 <code>f_auto,q_auto</code> 交付（1.6MB PNG → ~120KB WebP，利 LCP）。文章 <code>NewsArticle</code> 的 <code>image</code> 指向該圖（<code>ImageObject</code>）。主列表加上發佈閘門：<b>文章經 AI 改寫且有圖才出現</b>，杜絕半成品卡片。</div>
+    <pre>NewsArticle.image → ImageObject（https://res.cloudinary.com/.../covers/&lt;id&gt;.png）
+og:image = summary_large_image
+queryNews(readyOnly) = 已改寫(article_md) AND 有圖(image_url)</pre>
   </div>
 
-  <h2>✅ 已就緒(可拿 Rich Result)</h2>
+  <h2>✅ 已就緒（可拿 Rich Result）</h2>
   <div class="card">
   <table>
     <tr><th>功能</th><th>狀態</th><th>實測證據</th></tr>
-    <tr><td>Title links</td><td><span class="badge b-ok">✓</span></td><td>每頁唯一、語意清楚的 <code>&lt;title&gt;</code></td></tr>
+    <tr><td><b>hreflang / 多語系</b></td><td><span class="badge b-new">★ 已就緒</span></td><td>分類頁/文章頁含 zh-Hant / en / x-default；在地化 title；各語 canonical；sitemap 雙語替代</td></tr>
+    <tr><td><b>圖片（自產封面）</b></td><td><span class="badge b-new">★ 已就緒</span></td><td>每篇皆有圖；NewsArticle → ImageObject（Cloudinary）；OG <code>summary_large_image</code></td></tr>
+    <tr><td>Title links</td><td><span class="badge b-ok">✓</span></td><td>每頁唯一、語意清楚且在地化的 <code>&lt;title&gt;</code></td></tr>
     <tr><td>Snippets / meta description</td><td><span class="badge b-ok">✓</span></td><td>每頁皆有 description</td></tr>
-    <tr><td><b>Article</b>(NewsArticle)</td><td><span class="badge b-ok">✓ 完整</span></td><td>headline / image / datePublished / dateModified / author / publisher(含 logo)/ mainEntityOfPage / keywords / isBasedOn 全齊</td></tr>
-    <tr><td>Breadcrumb</td><td><span class="badge b-ok">✓</span></td><td>文章/幣種/抄底/逃頂頁皆合規(賽道→幣對→新聞)</td></tr>
+    <tr><td><b>Article</b>(NewsArticle)</td><td><span class="badge b-ok">✓ 完整</span></td><td>headline / image / datePublished / dateModified / author / publisher（含 logo）/ mainEntityOfPage / keywords 全齊</td></tr>
+    <tr><td>Breadcrumb</td><td><span class="badge b-ok">✓</span></td><td>文章/幣種/抄底/逃頂頁皆合規（賽道→幣對→新聞）</td></tr>
     <tr><td>Dataset</td><td><span class="badge b-ok">✓</span></td><td><code>/dip-index</code>、<code>/top-signal</code> 原創命名數據資產</td></tr>
     <tr><td>FAQ(FAQPage)</td><td><span class="badge b-ok">✓</span></td><td>幣種頁</td></tr>
-    <tr><td>Organization + Site name</td><td><span class="badge b-ok">✓</span></td><td>WebSite + Organization(name + logo)</td></tr>
+    <tr><td>Organization + Site name</td><td><span class="badge b-ok">✓</span></td><td>WebSite + Organization（name + logo）</td></tr>
     <tr><td>Carousel(ItemList)</td><td><span class="badge b-ok">✓</span></td><td>幣種頁 CollectionPage + ItemList</td></tr>
-    <tr><td>Favicon</td><td><span class="badge b-ok">✓</span></td><td><code>/favicon.ico</code></td></tr>
+    <tr><td>WebSite SearchAction</td><td><span class="badge b-ok">✓</span></td><td>Sitelinks 搜尋框標記（<code>/news?q=</code>）</td></tr>
+    <tr><td>Canonical（列表頁）</td><td><span class="badge b-ok">✓</span></td><td>分類/文章頁自我指向、各語言版本</td></tr>
     <tr><td>Publication dates</td><td><span class="badge b-ok">✓</span></td><td>Article datePublished/dateModified + 可見日期</td></tr>
-    <tr><td>Sitemap</td><td><span class="badge b-ok">✓</span></td><td><b>2,125 URL</b>(文章 2,010 + 幣種 112 + 指標頁),含 lastmod/changefreq/priority</td></tr>
-    <tr><td>robots.txt</td><td><span class="badge b-ok">✓</span></td><td>Allow / + Disallow /api、/news/markets + Host + Sitemap</td></tr>
-    <tr><td>Open Graph / Twitter card</td><td><span class="badge b-ok">✓</span></td><td>內容頁 <code>summary_large_image</code> + 動態 OG 圖;指標頁 <code>summary</code></td></tr>
-    <tr><td>Mobile / viewport</td><td><span class="badge b-ok">✓</span></td><td>viewport meta 正確,全站 SSR</td></tr>
+    <tr><td>Sitemap</td><td><span class="badge b-ok">✓</span></td><td><b>2,134 URL</b> + 4,268 條 hreflang 替代，含 lastmod</td></tr>
+    <tr><td>robots.txt</td><td><span class="badge b-ok">✓</span></td><td>Allow / + Disallow /api、/zh/news/markets、/en/news/markets + Host + Sitemap</td></tr>
+    <tr><td>Favicon</td><td><span class="badge b-ok">✓</span></td><td><code>/favicon.ico</code></td></tr>
+    <tr><td>Mobile / viewport</td><td><span class="badge b-ok">✓</span></td><td>viewport meta 正確，全站 SSR</td></tr>
   </table>
   </div>
 
@@ -121,20 +126,20 @@
   <div class="card">
   <table>
     <tr><th>項目</th><th>狀態</th><th>說明 / 建議</th></tr>
-    <tr><td>hreflang / 多語</td><td><span class="badge b-warn">✗</span></td><td>單語 zh-TW;無 i18n。屬移植 bydfi-ssr(已有 /zh /en)時再接的缺口</td></tr>
-    <tr><td>Image license metadata</td><td><span class="badge b-warn">✗</span></td><td>封面多為第三方來源、版權不明 → 建議只對自產(Imagen)封面補 license,第三方不標</td></tr>
-    <tr><td>Speakable</td><td><span class="badge b-warn">✗</span></td><td>新聞可選配(語音助理),效益有限,可延後</td></tr>
+    <tr><td><b>/news 首頁未在地化</b></td><td><span class="badge b-warn">✗ 新發現</span></td><td>分類頁/文章頁皆已在地化，但 <code>/zh/news</code> 與 <code>/en/news</code> 首頁仍用<b>靜態中繼資料</b>：<code>/en/news</code> 標題仍是中文、canonical 指向無語言碼的 <code>/news</code>、且<b>無 hreflang</b>。建議把首頁改成 <code>generateMetadata(locale)</code>，比照分類頁產生在地化 title + 各語 canonical + hreflang。</td></tr>
+    <tr><td>Image license metadata</td><td><span class="badge b-warn">✗ 可做了</span></td><td>v1 時因封面多為第三方、版權不明而擱置。<b>現在自產封面是我們自有版權</b>，建議對 AI 生成圖的 <code>ImageObject</code> 補 <code>license</code> / <code>creditText</code> / <code>creator</code> / <code>acquireLicensePage</code>，爭取 Google 「可授權圖片（Licensable）」標章。</td></tr>
+    <tr><td>Speakable</td><td><span class="badge b-warn">✗</span></td><td>新聞可選配（語音助理），效益有限，可延後</td></tr>
   </table>
   </div>
 
   <h2>◷ 需部署到公開網址後驗證</h2>
   <ul class="clean">
-    <li><b>Core Web Vitals / Page Experience</b> — 需 Lighthouse / PageSpeed 跑公開網址。架構面有利(SSR + Turbopack、無重型圖表庫、SVG 自繪走勢圖),但 LCP/CLS 要實測。</li>
-    <li><b>官方 Rich Results Test</b> — <code>localhost</code> 抓不到;部署後可逐頁跑驗證 Article / Breadcrumb / Dataset / FAQ。</li>
-    <li><b>Discover / AI Overviews / Preferred sources</b> — 資格制無法「實作」,但內容已具備條件(大圖、即時、結構化、有事實/日期)。</li>
+    <li><b>Core Web Vitals / Page Experience</b> — 需 Lighthouse / PageSpeed 跑公開網址。架構面有利（SSR + Turbopack、SVG 自繪走勢圖、封面圖走 Cloudinary <code>f_auto,q_auto</code> 已壓到 ~120KB），但 LCP/CLS 要實測。</li>
+    <li><b>官方 Rich Results Test</b> — <code>localhost</code> 抓不到；部署後可逐頁跑驗證 Article / Breadcrumb / Dataset / FAQ / 以及 hreflang 對應正確性（Search Console「國際定位」報告）。</li>
+    <li><b>Discover / AI Overviews / Preferred sources</b> — 資格制無法「實作」，但內容已具備條件（大圖、即時、結構化、有事實/日期、雙語）。</li>
   </ul>
 
-  <h2>— 不適用(內容類型不符)</h2>
+  <h2>— 不適用（內容類型不符）</h2>
   <ul class="clean">
     <li>Product / Review / Merchant listing / Return &amp; Shipping policy / Loyalty</li>
     <li>Event / Job posting / Recipe / Course / Movie / Local Business / Vacation Rental</li>
@@ -144,12 +149,12 @@
 
   <div class="verdict">
     <h2 style="margin-top:0">結論</h2>
-    <p style="margin:0 0 10px">整體 <b>結構化資料覆蓋度很高</b>:核心 rich result(Article、Breadcrumb、Dataset、FAQ、Organization、Carousel、Sitemap)全部到位且欄位完整,以原型而言 SEO / GEO 基礎扎實。</p>
-    <p style="margin:0">本次已補上兩個低成本高價值項目(<b>列表頁 canonical</b>、<b>WebSite SearchAction</b>)。剩餘缺口(hreflang、image license、speakable)多屬移植階段或低優先;真正待辦是 <b>部署後跑官方驗證 + 量 Core Web Vitals</b>。</p>
+    <p style="margin:0 0 10px">相較 v1，本版補上兩個高價值能力並已驗證:<b>多語系（hreflang + 在地化 + sitemap 雙語替代）</b> 與 <b>每篇皆有圖（AI 自產封面，且只發佈「改寫＋有圖」的完整文章）</b>。核心 rich result（Article、Breadcrumb、Dataset、FAQ、Organization、Carousel、SearchAction、Sitemap）仍全部到位。</p>
+    <p style="margin:0">剩餘待辦明確且小:<b>① 把 /news 首頁中繼資料在地化</b>（目前唯一的 i18n 漏網）、<b>② 為自產封面補 image license 標記</b>（爭取 Licensable 標章）。其餘為部署後才能跑的官方驗證與 Core Web Vitals 量測。</p>
   </div>
 
   <footer>
-    自動產生於 2026-06-23 · 對照 Google Search Central「Search Appearance」文件 · 稽核對象:hotspot-monitor 前端(Next.js App Router, SSR)
+    自動產生於 2026-06-24（v2）· 對照 Google Search Central「Search Appearance」文件 · 稽核對象:hotspot-monitor 前端（Next.js App Router, SSR, i18n /zh /en）
   </footer>
 </div>
 </body>
