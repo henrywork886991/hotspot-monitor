@@ -337,12 +337,33 @@ def _coins_array(symbols: str | None) -> list[str]:
     return out
 
 
+def _md_to_text(md: str | None) -> str:
+    """Markdown → clean newline-separated paragraphs. The bydfi-ssr detail page
+    splits content by \\n and renders each as a plain <p> (no markdown/HTML), so
+    we strip ## headings, **bold**, and turn `- ` bullets into `• ` — otherwise
+    the raw markdown symbols would show on the page."""
+    if not md:
+        return ""
+    out: list[str] = []
+    for line in md.replace("\r", "").split("\n"):
+        s = line.strip()
+        if not s:
+            out.append("")
+            continue
+        s = re.sub(r"^#{1,6}\s+", "", s)             # ## 標題 → 標題
+        s = re.sub(r"^\s*[-*]\s+", "• ", s)          # - 項目 → • 項目
+        s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)     # **粗體** → 粗體
+        s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", s)
+        out.append(s)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
 def _to_hotnews_item(r: dict) -> dict:
     title = r.get("article_title") or r.get("title") or ""
     return {
         "id": str(r.get("id")),
         "title": title,
-        "content": r.get("article_md") or r.get("fulltext") or r.get("content") or "",
+        "content": _md_to_text(r.get("article_md")) or r.get("fulltext") or r.get("content") or "",
         "summary": r.get("summary_zh") or r.get("summary") or "",
         "alias": f"{_slugify(title)}-{r.get('id')}",
         "coverImage": r.get("image_url") or "",
