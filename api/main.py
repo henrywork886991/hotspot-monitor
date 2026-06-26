@@ -434,7 +434,14 @@ def cms_hot_news_page(
         conds.append("article_title IS NOT NULL AND article_title != ''")
     else:
         conds.append("article_title_en IS NOT NULL AND article_title_en != ''")
-    if coin and coin.lower() != "all":
+    if coin and coin.lower() == "altcoin":
+        # 山寨幣: coin-tagged crypto news that mentions NO major coin.
+        conds.append("symbols IS NOT NULL AND symbols != ''")
+        conds.append("category IN ('crypto','cn_crypto','defi','web3')")
+        for m in ALTCOIN_MAJORS:
+            conds.append("(',' || symbols) NOT LIKE ? ESCAPE '\\'")
+            params.append(f"%,{m}\\_%")
+    elif coin and coin.lower() != "all":
         b = re.sub(r"[^A-Z0-9]", "", coin.upper())
         conds.append("(',' || symbols) LIKE ? ESCAPE '\\'")
         params.append(f"%,{b}\\_%")
@@ -475,7 +482,7 @@ def cms_hot_news_detail(id: str | None = None, alias: str | None = None, lang: s
 @app.get(_CMS + "/coins")
 def cms_hot_news_coins(moduleCode: str | None = None, sourcePlatform: str | None = None):
     # Coin tabs: most-mentioned bases in the live window (excl. stablecoins).
-    data = hot_coins(limit=12)["coins"]
+    data = hot_coins(limit=24)["coins"]
     return {"code": 200, "message": "", "data": [c["base"] for c in data]}
 
 
