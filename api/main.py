@@ -371,15 +371,19 @@ def _to_hotnews_item(r: dict, lang: str = "zh") -> dict:
     # We only generate zh + en; other locales fall back to en.
     en = not str(lang).lower().startswith("zh")
     if en:
-        title = r.get("article_title_en") or r.get("article_title") or r.get("title") or ""
         content = _md_to_text(r.get("article_md_en")) or _md_to_text(r.get("article_md")) \
             or r.get("fulltext") or r.get("content") or ""
+        # Title must be in the SAME language as the body — fall back to the body's
+        # lead before ever using the raw source title (avoids a Korean title on an
+        # English/Chinese article).
+        title = r.get("article_title_en") or r.get("article_title") \
+            or _first_para(content) or r.get("title") or ""
         summary = _first_para(content) or r.get("summary") or ""
         score = r.get("article_score_en") or r.get("article_score") or 0
         lang_tag = "en_US"
     else:
-        title = r.get("article_title") or r.get("title") or ""
         content = _md_to_text(r.get("article_md")) or r.get("fulltext") or r.get("content") or ""
+        title = r.get("article_title") or _first_para(content) or r.get("title") or ""
         summary = r.get("summary_zh") or r.get("summary") or ""
         score = r.get("article_score") or 0
         lang_tag = "zh_tw"
@@ -424,6 +428,12 @@ def cms_hot_news_page(
     conds = ["category != 'markets'", "source != 'sopilot_twitter'",
              "fetched_at >= datetime('now', ?)"]
     params: list = [f"-{int(hours)} hours"]
+    # Only serve articles that already have the requested-language rewrite, so the
+    # feed is never polluted with un-rewritten source-language (e.g. Korean) titles.
+    if str(lang).lower().startswith("zh"):
+        conds.append("article_title IS NOT NULL AND article_title != ''")
+    else:
+        conds.append("article_title_en IS NOT NULL AND article_title_en != ''")
     if coin and coin.lower() != "all":
         b = re.sub(r"[^A-Z0-9]", "", coin.upper())
         conds.append("(',' || symbols) LIKE ? ESCAPE '\\'")
