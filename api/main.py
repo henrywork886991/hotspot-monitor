@@ -358,13 +358,36 @@ def _md_to_text(md: str | None) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
 
 
-def _to_hotnews_item(r: dict) -> dict:
-    title = r.get("article_title") or r.get("title") or ""
+def _first_para(text: str) -> str:
+    for line in (text or "").split("\n"):
+        s = line.strip()
+        if s:
+            return s
+    return ""
+
+
+def _to_hotnews_item(r: dict, lang: str = "zh") -> dict:
+    # Language policy: zh-* → Traditional Chinese content; everything else → English.
+    # We only generate zh + en; other locales fall back to en.
+    en = not str(lang).lower().startswith("zh")
+    if en:
+        title = r.get("article_title_en") or r.get("article_title") or r.get("title") or ""
+        content = _md_to_text(r.get("article_md_en")) or _md_to_text(r.get("article_md")) \
+            or r.get("fulltext") or r.get("content") or ""
+        summary = _first_para(content) or r.get("summary") or ""
+        score = r.get("article_score_en") or r.get("article_score") or 0
+        lang_tag = "en_US"
+    else:
+        title = r.get("article_title") or r.get("title") or ""
+        content = _md_to_text(r.get("article_md")) or r.get("fulltext") or r.get("content") or ""
+        summary = r.get("summary_zh") or r.get("summary") or ""
+        score = r.get("article_score") or 0
+        lang_tag = "zh_tw"
     return {
         "id": str(r.get("id")),
         "title": title,
-        "content": _md_to_text(r.get("article_md")) or r.get("fulltext") or r.get("content") or "",
-        "summary": r.get("summary_zh") or r.get("summary") or "",
+        "content": content,
+        "summary": summary,
         "alias": f"{_slugify(title)}-{r.get('id')}",
         "coverImage": r.get("image_url") or "",
         "sourcePlatform": r.get("source") or "",
@@ -375,10 +398,10 @@ def _to_hotnews_item(r: dict) -> dict:
         "moduleCode": "crypto-news",
         "coins": _coins_array(r.get("symbols")),
         "keywords": r.get("keywords") or "",
-        "aiScore": r.get("article_score") or 0,
+        "aiScore": score,
         "viewCount": r.get("view_count") or 0,
         "likeCount": r.get("like_count") or 0,
-        "lang": "zh_tw",
+        "lang": lang_tag,
         "translationStatus": 1,
     }
 
@@ -396,6 +419,7 @@ def cms_hot_news_page(
     page: int = 1,
     rows: int = Query(10, le=100),
     hours: int = 168,
+    lang: str = "zh",
 ):
     conds = ["category != 'markets'", "source != 'sopilot_twitter'",
              "fetched_at >= datetime('now', ?)"]
@@ -420,11 +444,11 @@ def cms_hot_news_page(
                   FROM hotspots {where}
                 ) SELECT * FROM ranked WHERE rn = 1 ORDER BY {order_sql} LIMIT ? OFFSET ?""",
             params + [rows, offset]))
-    return {"code": 200, "message": "", "data": {"list": [_to_hotnews_item(r) for r in items], "total": total}}
+    return {"code": 200, "message": "", "data": {"list": [_to_hotnews_item(r, lang) for r in items], "total": total}}
 
 
 @app.get(_CMS + "/detail")
-def cms_hot_news_detail(id: str | None = None, alias: str | None = None):
+def cms_hot_news_detail(id: str | None = None, alias: str | None = None, lang: str = "zh"):
     rid = None
     if id and id.isdigit():
         rid = int(id)
@@ -435,7 +459,7 @@ def cms_hot_news_detail(id: str | None = None, alias: str | None = None):
         return {"code": 200, "message": "", "data": None}
     with _conn() as c:
         row = c.execute("SELECT * FROM hotspots WHERE id = ?", (rid,)).fetchone()
-    return {"code": 200, "message": "", "data": _to_hotnews_item(dict(row)) if row else None}
+    return {"code": 200, "message": "", "data": _to_hotnews_item(dict(row), lang) if row else None}
 
 
 @app.get(_CMS + "/coins")
