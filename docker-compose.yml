@@ -1,0 +1,41 @@
+# Local / test-env deployment: API (always-on) + worker (pipeline loop),
+# sharing the data dir (SQLite + JSON). See DEPLOY.md.
+#
+#   cp .env.example .env   # fill keys
+#   docker compose up -d --build
+#   curl localhost:8900/api/health
+#
+# The bind-mount ./data seeds the container with your existing 80M DB so the
+# API has content immediately. Swap to a named volume for a clean slate.
+
+services:
+  api:
+    build: .
+    command: ["api"]
+    ports:
+      - "8900:8900"
+    env_file:
+      - .env
+    environment:
+      HOTSPOT_DB_PATH: /app/data/hotspots.db
+      PORT: "8900"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8900/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build: .
+    command: ["worker"]
+    env_file:
+      - .env
+    environment:
+      HOTSPOT_DB_PATH: /app/data/hotspots.db
+      REFRESH_INTERVAL: "7200"   # 2h, matches the local launchd cadence
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

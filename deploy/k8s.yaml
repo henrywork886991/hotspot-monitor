@@ -1,0 +1,94 @@
+# Kubernetes reference manifests, aligned with BYDFi's k8s + CronJob convention.
+# Roles: api (Deployment, always-on) + worker (CronJob, every 2h). They share one
+# PVC mounted at /app/data (SQLite + JSON). For SQLite the PVC must be
+# ReadWriteMany (api reads while the CronJob writes); for a single-writer setup
+# or an external DB (MySQL/SelectDB/Postgres) a ReadWriteOnce PVC is enough.
+#
+# Replace <REGISTRY>/<IMAGE>:<TAG> and put secrets in the `hotspot-secrets` Secret.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hotspot-secrets
+type: Opaque
+stringData:
+  DEEPSEEK_API_KEY: ""
+  IMAGE_API_KEY: ""
+  CLOUDINARY_URL: ""
+  # ...add the rest from .env.example
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hotspot-data
+spec:
+  accessModes: ["ReadWriteMany"]   # RWX so api + cronjob can share (SQLite)
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotspot-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: hotspot-api }
+  template:
+    metadata:
+      labels: { app: hotspot-api }
+    spec:
+      containers:
+        - name: api
+          image: <REGISTRY>/<IMAGE>:<TAG>
+          args: ["api"]
+          ports: [{ containerPort: 8900 }]
+          envFrom:
+            - secretRef: { name: hotspot-secrets }
+          env:
+            - { name: HOTSPOT_DB_PATH, value: /app/data/hotspots.db }
+          volumeMounts:
+            - { name: data, mountPath: /app/data }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 8900 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: hotspot-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hotspot-api
+spec:
+  selector: { app: hotspot-api }
+  ports:
+    - { port: 80, targetPort: 8900 }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hotspot-worker
+spec:
+  schedule: "0 */2 * * *"          # every 2 hours
+  concurrencyPolicy: Forbid         # never overlap runs
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: worker
+              image: <REGISTRY>/<IMAGE>:<TAG>
+              args: ["once"]        # run the pipeline exactly once, then exit
+              envFrom:
+                - secretRef: { name: hotspot-secrets }
+              env:
+                - { name: HOTSPOT_DB_PATH, value: /app/data/hotspots.db }
+              volumeMounts:
+                - { name: data, mountPath: /app/data }
+          volumes:
+            - name: data
+              persistentVolumeClaim: { claimName: hotspot-data }

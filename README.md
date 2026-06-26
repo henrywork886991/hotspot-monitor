@@ -61,12 +61,43 @@ python hotspot-monitor/scripts/collect_trend.py --category stocks | python hotsp
 # 全部來源 + 存庫
 python hotspot-monitor/scripts/collect_trend.py --category all | python hotspot-monitor/scripts/save_to_db.py
 
+# 收集 + 同步抓取全文（Jina + trafilatura）
+python scripts/collect_trend.py --category crypto --enrich | python scripts/save_to_db.py
+
+# 對 DB 中已存的短內容批次補全文（最多 100 條）
+python scripts/enrich_content.py
+
+# 只補特定來源的全文
+python scripts/enrich_content.py --source coindesk --limit 50
+
 # 查詢最近 24 小時
 python hotspot-monitor/scripts/query_db.py --recent 24
 
 # 關鍵字搜尋
 python hotspot-monitor/scripts/collect_keyword.py "Bitcoin ETF" --days 7 | python hotspot-monitor/scripts/save_to_db.py
 ```
+
+---
+
+## 全文抓取（Fulltext Enrichment）
+
+RSS 訂閱通常只有摘要（100–500 字）。`enrich_content.py` 和 `--enrich` 旗標可以自動補全文：
+
+| 策略 | 說明 |
+|------|------|
+| **Jina Reader** | `r.jina.ai/{url}` — 支援 JS 渲染，無需 API Key |
+| **trafilatura** | 本地 HTML 解析器，Jina 失敗時自動 fallback |
+
+**成功率（實測，2026-05-25）：**
+
+| 來源 | 成功率 | 平均全文長度 |
+|------|--------|------------|
+| PANews | 100% | 4,500 字 |
+| ODaily | 100% | 4,800 字 |
+| CoinDesk | ~90% | 8,000 字 |
+| Decrypt | ~90% | 8,000 字 |
+
+> 跳過的來源（純 API/社群）：CoinGecko、DexScreener、HackerNews、V2EX、SoPilot Twitter、TradingView、PANews API、華爾街見聞
 
 ---
 
@@ -204,6 +235,7 @@ hotspot-monitor/
 │   ├── collect_keyword.py  ← 關鍵字搜尋
 │   ├── collect_twitter.py  ← Twitter 瀏覽器爬取（選用）
 │   ├── save_to_db.py       ← 儲存到 SQLite
+│   ├── enrich_content.py   ← 補全文（Jina Reader + trafilatura fallback）
 │   └── query_db.py         ← 查詢歷史數據
 ├── requirements.txt
 ├── config.example.json     ← 複製為 config.json 後可自訂
