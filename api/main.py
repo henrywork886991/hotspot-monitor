@@ -374,6 +374,7 @@ def _to_hotnews_item(r: dict) -> dict:
         "publishTime": _epoch_ms(r.get("published_at") or r.get("fetched_at")),
         "moduleCode": "crypto-news",
         "coins": _coins_array(r.get("symbols")),
+        "keywords": r.get("keywords") or "",
         "aiScore": r.get("article_score") or 0,
         "viewCount": r.get("view_count") or 0,
         "likeCount": r.get("like_count") or 0,
